@@ -50,7 +50,7 @@ target_link_libraries(${LIB_NAME} PUBLIC
 # --- Add the subdirectory for the test executable ---
 # This conditional ensures that the 'test' subdirectory is only configured
 # when this project is being built directly, not when it's included as a
-# submodule in a larger project like PoliMark.
+# submodule in a larger project.
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     message(STATUS "Building QuickDb as a standalone project. Including tests.")
     add_subdirectory(test)
