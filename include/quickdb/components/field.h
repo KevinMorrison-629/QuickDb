@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -16,6 +17,9 @@
 
 namespace QDB
 {
+    // Forward-declare Document for use in FieldValue templates
+    class Document;
+
     /// @brief Enumerates the possible BSON data types that a field can represent.
     enum class FieldType : uint8_t
     {
@@ -122,6 +126,13 @@ namespace QDB
                                       std::unordered_map<std::string, FieldValue> // For FT_OBJECT
                                       >;
 
+    template <typename> struct is_std_vector : std::false_type
+    {
+    };
+    template <typename T, typename A> struct is_std_vector<std::vector<T, A>> : std::true_type
+    {
+    };
+
     /// @brief Represents a BSON-like field, containing both its type and its value.
     /// This struct is used to build and parse BSON documents in a more type-safe manner
     /// before converting to/from the bsoncxx library's representations.
@@ -141,6 +152,71 @@ namespace QDB
         // during copy/move construction, which can prevent certain ambiguous overload errors.
         template <typename T, typename = std::enable_if_t<!std::is_same_v<std::decay_t<T>, FieldValue>>>
         FieldValue(const T &val) : type(type_to_fieldtype<std::decay_t<T>>::value), value(val){};
+
+        /// @brief Template constructor to automatically handle std::vector<T>
+        template <typename T> FieldValue(const std::vector<T> &vec) : type(FieldType::FT_ARRAY)
+        {
+            std::vector<FieldValue> fv_vector;
+            fv_vector.reserve(vec.size());
+            for (const auto &item : vec)
+            {
+                if constexpr (std::is_base_of_v<Document, T>)
+                {
+                    // For documents, we must serialize them to their field map.
+                    fv_vector.emplace_back(FieldType::FT_OBJECT, item.to_fields());
+                }
+                else
+                {
+                    // For primitives and other vectors, the regular constructor works.
+                    fv_vector.emplace_back(item);
+                }
+            }
+            value = fv_vector;
+        }
+
+        /// @brief Template method to get the value as a specific type T.
+        template <typename T> T as() const
+        {
+            if constexpr (std::is_same_v<T, FieldValue>)
+            {
+                return *this;
+            }
+            else if constexpr (is_std_vector<T>::value)
+            {
+                using U = typename T::value_type;
+                if (type != FieldType::FT_ARRAY)
+                    return T{};
+                const auto &fv_vector = std::get<std::vector<FieldValue>>(value);
+                T result_vector;
+                result_vector.reserve(fv_vector.size());
+                for (const auto &fv_item : fv_vector)
+                {
+                    result_vector.push_back(fv_item.as<U>());
+                }
+                return result_vector;
+            }
+            else if constexpr (std::is_base_of_v<Document, T>)
+            {
+                if (type != FieldType::FT_OBJECT)
+                    return T{};
+                const auto &map = std::get<std::unordered_map<std::string, FieldValue>>(value);
+                T doc;
+                doc.from_fields(map);
+                return doc;
+            }
+            else
+            {
+                try
+                {
+                    if (std::holds_alternative<T>(value))
+                        return std::get<T>(value);
+                }
+                catch (const std::bad_variant_access &)
+                {
+                }
+                return T{};
+            }
+        }
 
         FieldType type = FieldType::FT_UNDEFINED; ///< The BSON type of the field.
         FieldVariant value;                       ///< The actual value of the field, stored in a variant.
@@ -414,4 +490,5 @@ namespace QDB
         }
         return fv;
     }
+
 } // namespace QDB

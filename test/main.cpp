@@ -40,7 +40,7 @@ int main()
 
         users.insert_one(alice);
         std::cout << "Inserted user. ID is now: " << alice.get_id_str() << std::endl;
-        alice.print();
+        QDB::print_document(alice);
 
         // 4. Find the user back by their ID
         std::cout << "\n--- Testing find_one by ID ---" << std::endl;
@@ -50,7 +50,7 @@ int main()
         if (found_alice_opt)
         {
             std::cout << "Found user by ID:" << std::endl;
-            found_alice_opt->print();
+            QDB::print_document(*found_alice_opt);
         }
         else
         {
@@ -82,7 +82,7 @@ int main()
         std::cout << "Found " << older_users.size() << " users older than 35:" << std::endl;
         for (const auto &user : older_users)
         {
-            user.print();
+            QDB::print_document(user);
         }
 
         // 7. Test counting
