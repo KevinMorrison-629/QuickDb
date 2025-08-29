@@ -42,4 +42,19 @@ namespace QDB
         // Automatically managed by the library.
         FieldValue _id;
     };
+
+    /// @brief Helper to safely get a field and deserialize it into an output variable.
+    /// @tparam T The desired C++ type for the output.
+    /// @param fields The map of fields from the database.
+    /// @param key The name of the field to extract.
+    /// @param out_val The variable to populate with the field's value.
+    template <typename T>
+    void get_field(const std::unordered_map<std::string, FieldValue> &fields, const std::string &key, T &out_val)
+    {
+        auto it = fields.find(key);
+        if (it != fields.end())
+        {
+            out_val = it->second.as<T>();
+        }
+    }
 } // namespace QDB
