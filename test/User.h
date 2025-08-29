@@ -13,41 +13,25 @@ struct User : public QDB::Document
     std::string email;
     int32_t age = 0;
 
-    // Serialization: Convert member variables to FieldValue map
-    std::unordered_map<std::string, QDB::FieldValue> to_fields() const override
+    /// @brief Serializes the User object into a map of FieldValues for database storage.
+    /// @return An unordered_map representing the document's fields.
+    virtual std::unordered_map<std::string, QDB::FieldValue> to_fields() const override
     {
-        return {{"name", {QDB::FieldType::FT_STRING, name}},
-                {"email", {QDB::FieldType::FT_STRING, email}},
-                {"age", {QDB::FieldType::FT_INT_32, age}}};
+        std::unordered_map<std::string, QDB::FieldValue> fields;
+        fields["name"] = name;
+        fields["email"] = email;
+        fields["age"] = age;
+        return fields;
     }
 
-    // Deserialization: Populate member variables from FieldValue map
-    void from_fields(const std::unordered_map<std::string, QDB::FieldValue> &fields) override
+    /// @brief  Deserializes a map of FieldValues from the database into this User object.
+    /// @param fields The map of fields retrieved from the database.
+    virtual void from_fields(const std::unordered_map<std::string, QDB::FieldValue> &fields) override
     {
-        try
-        {
-            // Use .at() to throw an exception if a field is missing
-            name = std::get<std::string>(fields.at("name").value);
-            email = std::get<std::string>(fields.at("email").value);
-            age = std::get<int32_t>(fields.at("age").value);
-        }
-        catch (const std::out_of_range &e)
-        {
-            // Handle cases where a field might be missing in the BSON document
-            std::cerr << "Error deserializing User: missing field. " << e.what() << std::endl;
-        }
-        catch (const std::bad_variant_access &e)
-        {
-            // Handle cases where a field has the wrong type in the BSON document
-            std::cerr << "Error deserializing User: type mismatch. " << e.what() << std::endl;
-        }
-    }
-
-    void print() const
-    {
-        std::cout << "User ID: " << get_id_str() << "\n"
-                  << "  Name:  " << name << "\n"
-                  << "  Email: " << email << "\n"
-                  << "  Age:   " << age << std::endl;
+        // The get_id() method in the Collection class handles setting the protected _id member.
+        // We just need to populate our own class members from the map.
+        QDB::get_field(fields, "name", name);
+        QDB::get_field(fields, "email", email);
+        QDB::get_field(fields, "age", age);
     }
 };
