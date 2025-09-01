@@ -146,6 +146,46 @@ namespace QDB
             }
         }
 
+        std::vector<T> find_random(const Query &query, size_t count)
+        {
+            try
+            {
+                bsoncxx::builder::basic::document filter_builder;
+                for (const auto &[key, value] : query.get_fields())
+                {
+                    AppendToDocument(filter_builder, key, value);
+                }
+
+                mongocxx::pipeline p{};
+                p.match(filter_builder.view());
+                p.sample(static_cast<int64_t>(count));
+
+                auto cursor = _collection_handle.aggregate(p, mongocxx::options::aggregate{});
+                std::vector<T> results;
+
+                for (auto view : cursor)
+                {
+                    T doc_obj;
+                    std::unordered_map<std::string, FieldValue> fields;
+                    for (auto element : view)
+                    {
+                        fields[std::string(element.key())] = fromBsonElement(element);
+                    }
+                    doc_obj.from_fields(fields);
+                    if (view.find("_id") != view.end())
+                    {
+                        doc_obj._id = fromBsonElement(view["_id"]);
+                    }
+                    results.push_back(doc_obj);
+                }
+                return results;
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception(e.what());
+            }
+        }
+
         int64_t replace_one(const Query &filter, const T &update)
         {
             try
