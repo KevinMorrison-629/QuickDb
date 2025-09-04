@@ -146,7 +146,7 @@ namespace QDB
             }
         }
 
-        std::vector<T> find_random(const Query &query, size_t count)
+        std::vector<T> find_random(const Query &query, size_t count, bool distinct = true)
         {
             try
             {
@@ -156,29 +156,62 @@ namespace QDB
                     AppendToDocument(filter_builder, key, value);
                 }
 
-                mongocxx::pipeline p{};
-                p.match(filter_builder.view());
-                p.sample(static_cast<int64_t>(count));
-
-                auto cursor = _collection_handle.aggregate(p, mongocxx::options::aggregate{});
-                std::vector<T> results;
-
-                for (auto view : cursor)
+                if (distinct)
                 {
-                    T doc_obj;
-                    std::unordered_map<std::string, FieldValue> fields;
-                    for (auto element : view)
+                    mongocxx::pipeline p{};
+                    p.match(filter_builder.view());
+                    p.sample(static_cast<int64_t>(count));
+
+                    auto cursor = _collection_handle.aggregate(p, mongocxx::options::aggregate{});
+                    std::vector<T> results;
+
+                    for (auto view : cursor)
                     {
-                        fields[std::string(element.key())] = fromBsonElement(element);
+                        T doc_obj;
+                        std::unordered_map<std::string, FieldValue> fields;
+                        for (auto element : view)
+                        {
+                            fields[std::string(element.key())] = fromBsonElement(element);
+                        }
+                        doc_obj.from_fields(fields);
+                        if (view.find("_id") != view.end())
+                        {
+                            doc_obj._id = fromBsonElement(view["_id"]);
+                        }
+                        results.push_back(doc_obj);
                     }
-                    doc_obj.from_fields(fields);
-                    if (view.find("_id") != view.end())
-                    {
-                        doc_obj._id = fromBsonElement(view["_id"]);
-                    }
-                    results.push_back(doc_obj);
+                    return results;
                 }
-                return results;
+                else
+                {
+                    std::vector<T> results;
+                    for (size_t i = 0; i < count; i++)
+                    {
+                        mongocxx::pipeline p{};
+                        p.match(filter_builder.view());
+                        p.sample(1U);
+
+                        auto cursor = _collection_handle.aggregate(p, mongocxx::options::aggregate{});
+
+                        for (auto view : cursor)
+                        {
+                            T doc_obj;
+                            std::unordered_map<std::string, FieldValue> fields;
+                            for (auto element : view)
+                            {
+                                fields[std::string(element.key())] = fromBsonElement(element);
+                            }
+                            doc_obj.from_fields(fields);
+                            if (view.find("_id") != view.end())
+                            {
+                                doc_obj._id = fromBsonElement(view["_id"]);
+                            }
+                            results.push_back(doc_obj);
+                        }
+                    }
+
+                    return results;
+                }
             }
             catch (const std::exception &e)
             {
