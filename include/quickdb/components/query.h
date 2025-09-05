@@ -30,6 +30,18 @@ namespace QDB
         }
 
         /**
+         * @brief Creates a query to find a document by its ObjectId.
+         * @param id_str The ObjectId.
+         * @return A Query object for the specified ID.
+         */
+        static Query by_id(const bsoncxx::oid &id)
+        {
+            Query q;
+            q.add_condition("_id", FieldValue(id));
+            return q;
+        }
+
+        /**
          * @brief Adds an equality condition to the query.
          * @tparam T The type of the value.
          * @param field The document field to match.

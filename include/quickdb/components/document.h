@@ -2,6 +2,7 @@
 
 #include "quickdb/components/field.h"
 
+#include <bsoncxx/oid.hpp>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -21,17 +22,13 @@ namespace QDB
         // User must implement this to populate their class members from a map of FieldValues.
         virtual void from_fields(const std::unordered_map<std::string, FieldValue> &fields) = 0;
 
-        // Helper to get the document's ObjectId as a string.
-        std::string get_id_str() const
-        {
-            if (_id.type == FieldType::FT_OBJECT_ID)
-            {
-                return std::get<bsoncxx::oid>(_id.value).to_string();
-            }
-            return "";
-        }
+        /// @brief Gets the document's ObjectId as a hex string.
+        /// @return The 24-character hex string representation of the _id.
+        std::string get_id_str() const { return _id.to_string(); }
 
-        FieldValue get_id() const { return _id; }
+        /// @brief Gets the document's raw bsoncxx::oid object.
+        /// @return The bsoncxx::oid object for this document.
+        bsoncxx::oid get_id() const { return _id; }
 
         // The Collection<T> class will be a friend to access the protected _id member.
         template <typename T> friend class Collection;
@@ -41,8 +38,8 @@ namespace QDB
 
         template <typename T> friend class Collection;
 
-        // Automatically managed by the library.
-        FieldValue _id;
+        // Automatically managed by the library
+        bsoncxx::oid _id;
     };
 
     /// @brief Helper to safely get a field and deserialize it into an output variable.
