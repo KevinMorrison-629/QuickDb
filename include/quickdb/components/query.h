@@ -114,6 +114,26 @@ namespace QDB
         }
 
         /**
+         * @brief Adds a regular expression match ($regex) condition.
+         * @param field The document field to match.
+         * @param pattern The regex pattern.
+         * @param options MongoDB regex options (e.g., "i" for case-insensitivity).
+         * @return A reference to the current Query object for chaining.
+         */
+        Query &regex(const std::string &field, const std::string &pattern, const std::string &options = "")
+        {
+            // BSON format for regex is a nested document: { field: { $regex: 'pattern', $options: 'i' } }
+            std::unordered_map<std::string, FieldValue> regex_map;
+            regex_map["$regex"] = FieldValue(pattern);
+            if (!options.empty())
+            {
+                regex_map["$options"] = FieldValue(options);
+            }
+            _query_map[field] = FieldValue(regex_map);
+            return *this;
+        }
+
+        /**
          * @brief Gets the underlying field map representing the query.
          * @return A constant reference to the query's field map.
          */

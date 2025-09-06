@@ -47,6 +47,34 @@ namespace QDB
         }
 
         /**
+         * @brief Adds a "$pull" operation to the update.
+         * Removes all instances of a value from an array.
+         * @tparam T The type of the value to remove.
+         * @param field The array field to modify.
+         * @param value The value to remove from the array.
+         * @return A reference to the current Update object for chaining.
+         */
+        template <typename T> Update &pull(const std::string &field, const T &value)
+        {
+            add_operator_field("$pull", field, FieldValue(value));
+            return *this;
+        }
+
+        /**
+         * @brief Adds an "$addToSet" operation to the update.
+         * Adds a value to an array only if the value does not already exist.
+         * @tparam T The type of the value to add.
+         * @param field The array field to modify.
+         * @param value The value to add to the set.
+         * @return A reference to the current Update object for chaining.
+         */
+        template <typename T> Update &add_to_set(const std::string &field, const T &value)
+        {
+            add_operator_field("$addToSet", field, FieldValue(value));
+            return *this;
+        }
+
+        /**
          * @brief Adds an "$inc" operation to the update.
          * Increments a field by a specified amount.
          * @tparam T A numeric type (e.g., int, double).
