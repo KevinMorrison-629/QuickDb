@@ -3,6 +3,7 @@
 #include "quickdb/components/document.h"
 #include "quickdb/components/exception.h"
 #include "quickdb/components/query.h"
+#include "quickdb/components/update.h"
 
 #include <memory>
 #include <optional>
@@ -325,6 +326,46 @@ namespace QDB
                     AppendToDocument(filter_builder, key, value);
                 }
                 return _collection_handle.count_documents(filter_builder.view());
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception(e.what());
+            }
+        }
+
+        /**
+         * @brief Updates a single document that matches the filter.
+         * @param filter A QDB::Query object specifying the filter criteria.
+         * @param update A QDB::Update object specifying the update operations (e.g., $set, $push).
+         * @return The number of documents modified.
+         */
+        int64_t update_one(const Query &filter, const Update &update)
+        {
+            try
+            {
+                // Build the filter document from the Query object
+                bsoncxx::builder::basic::document filter_builder;
+                for (const auto &[key, value] : filter.get_fields())
+                {
+                    AppendToDocument(filter_builder, key, value);
+                }
+
+                // Build the update document from the Update object
+                bsoncxx::builder::basic::document update_builder;
+                for (const auto &[key, value] : update.get_fields())
+                {
+                    AppendToDocument(update_builder, key, value);
+                }
+
+                // Call the underlying mongocxx driver method
+                auto result = _collection_handle.update_one(filter_builder.view(), update_builder.view());
+
+                if (result)
+                {
+                    return result->modified_count();
+                }
+
+                return 0;
             }
             catch (const std::exception &e)
             {
