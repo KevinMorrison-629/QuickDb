@@ -2,11 +2,21 @@
   "version": 2,
   "configurePresets": [
     {
-      "name": "default",
+      "name": "windows-default",
+      "displayName": "Windows - MSVC",
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "linux-default",
+      "displayName": "WSL - GCC",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-linux",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{HOME}/vcpkg/scripts/buildsystems/vcpkg.cmake"
       }
     }
   ]
