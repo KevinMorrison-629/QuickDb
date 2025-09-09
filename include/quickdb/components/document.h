@@ -11,6 +11,9 @@
 
 namespace QDB
 {
+    // forward declare the Collection class
+    template <typename T> class Collection;
+
     class Document
     {
     public:
