@@ -1,30 +1,29 @@
 #pragma once
 
 #include "quickdb/components/collection.h" // Note: May need forward declarations to avoid circular includes
-
 #include "quickdb/components/exception.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
-#include <mongocxx/instance.hpp>
-#include <mongocxx/pool.hpp>
-#include <mongocxx/uri.hpp>
-
-// Forward declarations for mongocxx types
-namespace mongocxx
-{
-    class instance;
-    class pool;
-} // namespace mongocxx
+// Use the library's official forward-declaration headers.
+// This avoids re-declaration errors and keeps this header file lightweight.
+#include <mongocxx/instance-fwd.hpp>
+#include <mongocxx/pool-fwd.hpp>
 
 namespace QDB
 {
     class Database
     {
     public:
-        // Constructor initializes the instance and connection pool.
+        // Constructor that takes a raw MongoDB URI string.
         Database(const std::string &uri);
+
+        // Constructor for authenticated connections.
+        // This constructor builds the URI string for you.
+        Database(const std::string &user, const std::string &pass, const std::string &host = "localhost",
+                 std::uint16_t port = 27017, const std::string &auth_db = "admin", std::uint32_t max_pool_size = 50);
 
         ~Database();
 
@@ -37,8 +36,6 @@ namespace QDB
         // The factory method for getting a type-safe collection handle.
         template <typename T> Collection<T> get_collection(const std::string &db_name, const std::string &collection_name)
         {
-            static_assert(std::is_base_of<Document, T>::value, "Template argument T must be a subclass of QDB::Document");
-
             auto client_entry = std::make_unique<mongocxx::pool::entry>(m_pool->acquire());
             auto collection_handle = (*(*client_entry))[db_name][collection_name];
             return Collection<T>(std::move(client_entry), collection_handle);
