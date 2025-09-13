@@ -2,6 +2,7 @@
 
 #include "quickdb/components/document.h"
 #include "quickdb/components/exception.h"
+#include "quickdb/components/options.h"
 #include "quickdb/components/query.h"
 #include "quickdb/components/update.h"
 
@@ -91,7 +92,7 @@ namespace QDB
             }
         }
 
-        std::optional<T> find_one(const Query &query)
+        std::optional<T> find_one(const Query &query, const FindOptions &options = FindOptions())
         {
             try
             {
@@ -101,7 +102,7 @@ namespace QDB
                     AppendToDocument(filter_builder, key, value);
                 }
 
-                auto maybe_result = _collection_handle.find_one(filter_builder.view());
+                auto maybe_result = _collection_handle.find_one(filter_builder.view(), options.to_mongocxx());
 
                 if (maybe_result)
                 {
@@ -112,7 +113,6 @@ namespace QDB
                     for (auto element : view)
                     {
                         std::string key = std::string(element.key());
-                        // Handle the _id separately from other fields.
                         if (key == "_id" && element.type() == bsoncxx::type::k_oid)
                         {
                             doc_obj._id = element.get_oid().value;
@@ -122,7 +122,6 @@ namespace QDB
                             fields[key] = fromBsonElement(element);
                         }
                     }
-                    // Populate the user-defined fields.
                     doc_obj.from_fields(fields);
                     return doc_obj;
                 }
@@ -134,7 +133,7 @@ namespace QDB
             }
         }
 
-        std::vector<T> find(const Query &query)
+        std::vector<T> find(const Query &query, const FindOptions &options = FindOptions())
         {
             try
             {
@@ -144,7 +143,7 @@ namespace QDB
                     AppendToDocument(filter_builder, key, value);
                 }
 
-                mongocxx::cursor cursor = _collection_handle.find(filter_builder.view());
+                mongocxx::cursor cursor = _collection_handle.find(filter_builder.view(), options.to_mongocxx());
                 std::vector<T> results;
 
                 for (auto view : cursor)
@@ -154,7 +153,6 @@ namespace QDB
                     for (auto element : view)
                     {
                         std::string key = std::string(element.key());
-                        // Handle the _id separately from other fields.
                         if (key == "_id" && element.type() == bsoncxx::type::k_oid)
                         {
                             doc_obj._id = element.get_oid().value;
@@ -164,7 +162,6 @@ namespace QDB
                             fields[key] = fromBsonElement(element);
                         }
                     }
-                    // Populate the user-defined fields.
                     doc_obj.from_fields(fields);
                     results.push_back(doc_obj);
                 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono> // Required for std::chrono::system_clock::time_point
 #include <cstdint>
 #include <string>
 #include <type_traits>
@@ -101,6 +102,11 @@ namespace QDB
     {
         static constexpr FieldType value = FieldType::FT_DATE; ///< Corresponding FieldType.
     };
+    /// @brief Specialization of type_to_fieldtype for std::chrono::system_clock::time_point.
+    template <> struct type_to_fieldtype<std::chrono::system_clock::time_point>
+    {
+        static constexpr FieldType value = FieldType::FT_DATE; ///< Corresponding FieldType.
+    };
     /// @brief Specialization of type_to_fieldtype for std::vector<FieldValue>.
     template <> struct type_to_fieldtype<std::vector<FieldValue>>
     {
@@ -157,6 +163,12 @@ namespace QDB
         template <typename T, typename = std::enable_if_t<!std::is_same_v<std::decay_t<T>, FieldValue>>>
         FieldValue(const T &val) : type(type_to_fieldtype<std::decay_t<T>>::value), value(val){};
 
+        /// @brief Constructs a FieldValue from a std::chrono::system_clock::time_point, converting it to a b_date.
+        FieldValue(const std::chrono::system_clock::time_point &tp)
+            : type(FieldType::FT_DATE), value(bsoncxx::types::b_date{tp})
+        {
+        }
+
         /// @brief Template constructor to automatically handle std::vector<T>
         template <typename T> FieldValue(const std::vector<T> &vec) : type(FieldType::FT_ARRAY)
         {
@@ -207,6 +219,24 @@ namespace QDB
                 T doc;
                 doc.from_fields(map);
                 return doc;
+            }
+            else if constexpr (std::is_same_v<T, std::chrono::system_clock::time_point>)
+            {
+                if (type != FieldType::FT_DATE)
+                    return T{}; // Return default constructed time_point
+                try
+                {
+                    if (std::holds_alternative<bsoncxx::types::b_date>(value))
+                    {
+                        // bsoncxx::types::b_date has an operator to convert to time_point
+                        return std::get<bsoncxx::types::b_date>(value);
+                    }
+                }
+                catch (const std::bad_variant_access &)
+                {
+                    // Should not happen if type is FT_DATE, but for safety.
+                }
+                return T{}; // Return default constructed time_point
             }
             else
             {
