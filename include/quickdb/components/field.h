@@ -91,7 +91,11 @@ namespace QDB
     {
         static constexpr FieldType value = FieldType::FT_STRING;
     };
-
+    /// @brief Specialization of type_to_fieldtype for bsoncxx::types::b_timestamp.
+    template <> struct type_to_fieldtype<bsoncxx::types::b_timestamp>
+    {
+        static constexpr FieldType value = FieldType::FT_TIMESTAMP; ///< Corresponding FieldType.
+    };
     /// @brief Specialization of type_to_fieldtype for bsoncxx::types::b_date.
     template <> struct type_to_fieldtype<bsoncxx::types::b_date>
     {
