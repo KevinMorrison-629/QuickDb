@@ -50,14 +50,18 @@ namespace QDB
     /// @param fields The map of fields from the database.
     /// @param key The name of the field to extract.
     /// @param out_val The variable to populate with the field's value.
+    /// @return true if field exists in map, else false
     template <typename T>
-    void get_field(const std::unordered_map<std::string, FieldValue> &fields, const std::string &key, T &out_val)
+    bool get_field(const std::unordered_map<std::string, FieldValue> &fields, const std::string &key, T &out_val)
     {
         auto it = fields.find(key);
         if (it != fields.end())
         {
             out_val = it->second.as<T>();
+            return true;
         }
+
+        return false;
     }
 
     // Forward declaration for the recursive helper

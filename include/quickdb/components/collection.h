@@ -1,5 +1,6 @@
 #pragma once
 
+#include "quickdb/components/aggregation.h" // Include the new aggregation builder
 #include "quickdb/components/document.h"
 #include "quickdb/components/exception.h"
 #include "quickdb/components/options.h"
@@ -15,6 +16,7 @@
 #include <mongocxx/collection.hpp>
 #include <mongocxx/cursor.hpp>
 #include <mongocxx/options/insert.hpp>
+#include <mongocxx/pipeline.hpp> // Required for aggregation
 #include <mongocxx/pool.hpp>
 #include <mongocxx/result/insert_many.hpp>
 
@@ -164,6 +166,37 @@ namespace QDB
                     }
                     doc_obj.from_fields(fields);
                     results.push_back(doc_obj);
+                }
+                return results;
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception(e.what());
+            }
+        }
+
+        /**
+         * @brief Executes an aggregation pipeline.
+         * @param agg The Aggregation pipeline to execute.
+         * @return A vector of maps, where each map represents a resulting document.
+         * @note The result is not strongly typed to T because aggregations can
+         * radically change the document structure.
+         */
+        std::vector<std::unordered_map<std::string, FieldValue>> aggregate(const Aggregation &agg)
+        {
+            try
+            {
+                auto cursor = _collection_handle.aggregate(agg.to_mongocxx(), mongocxx::options::aggregate{});
+
+                std::vector<std::unordered_map<std::string, FieldValue>> results;
+                for (auto view : cursor)
+                {
+                    std::unordered_map<std::string, FieldValue> doc_map;
+                    for (auto element : view)
+                    {
+                        doc_map[static_cast<std::string>(element.key())] = fromBsonElement(element);
+                    }
+                    results.push_back(doc_map);
                 }
                 return results;
             }
