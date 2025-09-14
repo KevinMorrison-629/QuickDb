@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <variant> // Include for std::get and std::holds_alternative
+#include <vector>
 
 namespace QDB
 {
@@ -43,6 +44,25 @@ namespace QDB
         template <typename T> Update &push(const std::string &field, const T &value)
         {
             add_operator_field("$push", field, FieldValue(value));
+            return *this;
+        }
+
+        /**
+         * @brief Adds a "$push" operation with an "$each" modifier.
+         * Appends multiple values to an array field.
+         * @tparam T The type of the elements in the vector.
+         * @param field The array field to modify.
+         * @param values A vector of values to append to the array.
+         * @return A reference to the current Update object for chaining.
+         */
+        template <typename T> Update &push_each(const std::string &field, const std::vector<T> &values)
+        {
+            // Create the subdocument for the $each operator, e.g., { "$each": [val1, val2] }
+            std::unordered_map<std::string, FieldValue> each_map;
+            each_map["$each"] = FieldValue(values);
+
+            // Add the $push operation with the $each subdocument
+            add_operator_field("$push", field, FieldValue(each_map));
             return *this;
         }
 
