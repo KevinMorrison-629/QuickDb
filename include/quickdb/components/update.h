@@ -67,6 +67,25 @@ namespace QDB
         }
 
         /**
+         * @brief Adds a "$pull" operation with an "$each" modifier.
+         * Pulls multiple values from an array field.
+         * @tparam T The type of the elements in the vector.
+         * @param field The array field to modify.
+         * @param values A vector of values to remove from the array.
+         * @return A reference to the current Update object for chaining.
+         */
+        template <typename T> Update &pull_each(const std::string &field, const std::vector<T> &values)
+        {
+            // Create the subdocument for the $each operator, e.g., { "$each": [val1, val2] }
+            std::unordered_map<std::string, FieldValue> each_map;
+            each_map["$each"] = FieldValue(values);
+
+            // Add the $pull operation with the $each subdocument
+            add_operator_field("$pull", field, FieldValue(each_map));
+            return *this;
+        }
+
+        /**
          * @brief Adds a "$pull" operation to the update.
          * Removes all instances of a value from an array.
          * @tparam T The type of the value to remove.
