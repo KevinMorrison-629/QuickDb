@@ -38,7 +38,7 @@ int main()
         alice.email = "alice@example.com";
         alice.age = 30;
 
-        users.insert_one(alice);
+        users.create_one(alice);
         std::cout << "Inserted user. ID is now: " << alice.get_id_str() << std::endl;
         QDB::print_document(alice);
 
@@ -70,14 +70,14 @@ int main()
         charlie.age = 38;
 
         std::vector<User> new_users = {bob, charlie};
-        users.insert_many(new_users);
+        users.create_many(new_users);
         std::cout << "Inserted 2 more users." << std::endl;
 
         // 6. Find all users older than 35
         std::cout << "\n--- Testing find with query (age > 35) ---" << std::endl;
         QDB::Query age_query;
         age_query.gt("age", 35);
-        auto older_users = users.find(age_query);
+        auto older_users = users.find_many(age_query);
 
         std::cout << "Found " << older_users.size() << " users older than 35:" << std::endl;
         for (const auto &user : older_users)

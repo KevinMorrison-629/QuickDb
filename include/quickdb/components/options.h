@@ -1,6 +1,7 @@
 #pragma once
 
 #include "quickdb/components/field.h"
+
 #include <bsoncxx/builder/basic/document.hpp>
 #include <mongocxx/options/find.hpp>
 #include <optional>
@@ -8,7 +9,7 @@
 namespace QDB
 {
     /**
-     * @brief A class for specifying options for find operations, such as sorting and limiting.
+     * @brief A class for specifying options for find operations.
      *
      * This class acts as a wrapper around mongocxx::options::find to integrate
      * with the QDB query builder.
@@ -42,6 +43,17 @@ namespace QDB
         }
 
         /**
+         * @brief Sets the number of documents to skip before returning results.
+         * @param skip The number of documents to skip.
+         * @return A reference to the current FindOptions object for chaining.
+         */
+        FindOptions &skip(int64_t skip)
+        {
+            _skip = skip;
+            return *this;
+        }
+
+        /**
          * @brief Gets the underlying mongocxx::options::find object.
          * @return The configured mongocxx::options::find object.
          */
@@ -56,11 +68,16 @@ namespace QDB
             {
                 opts.limit(_limit.value());
             }
+            if (_skip.has_value())
+            {
+                opts.skip(_skip.value());
+            }
             return opts;
         }
 
     private:
         bsoncxx::builder::basic::document _sort_builder{};
         std::optional<int64_t> _limit;
+        std::optional<int64_t> _skip;
     };
 } // namespace QDB
