@@ -22,6 +22,9 @@
 #include <mongocxx/cursor.hpp>
 #include <mongocxx/index_view.hpp>
 #include <mongocxx/options/find.hpp>
+#include <mongocxx/options/find_one_and_delete.hpp>
+#include <mongocxx/options/find_one_and_replace.hpp>
+#include <mongocxx/options/find_one_and_update.hpp>
 #include <mongocxx/pool.hpp>
 #include <mongocxx/result/delete.hpp>
 #include <mongocxx/result/insert_many.hpp>
@@ -204,24 +207,28 @@ namespace QDB
          * @brief Updates a single document that matches the filter.
          * @param filter_query A Query object defining which document to update.
          * @param update_doc An Update object defining the update operations.
+         * @param options Options for the operation (e.g., upsert).
          * @param session An optional session to use for the operation.
          * @return The number of documents modified.
          */
         int64_t update_one(const Query &filter_query, const Update &update_doc,
+                           const UpdateOptions &options = UpdateOptions{},
                            std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto filter = to_bson_doc(filter_query.get_fields());
                 auto update = to_bson_doc(update_doc.get_fields());
+                auto mongocxx_opts = options.to_mongocxx();
+
                 bsoncxx::v_noabi::stdx::optional<mongocxx::result::update> result;
                 if (session)
                 {
-                    result = _collection_handle.update_one(session->get(), filter.view(), update.view());
+                    result = _collection_handle.update_one(session->get(), filter.view(), update.view(), mongocxx_opts);
                 }
                 else
                 {
-                    result = _collection_handle.update_one(filter.view(), update.view());
+                    result = _collection_handle.update_one(filter.view(), update.view(), mongocxx_opts);
                 }
 
                 if (result)
@@ -240,24 +247,28 @@ namespace QDB
          * @brief Updates all documents that match the filter.
          * @param filter_query A Query object defining which documents to update.
          * @param update_doc An Update object defining the update operations.
+         * @param options Options for the operation (e.g., upsert).
          * @param session An optional session to use for the operation.
          * @return The number of documents modified.
          */
         int64_t update_many(const Query &filter_query, const Update &update_doc,
+                            const UpdateOptions &options = UpdateOptions{},
                             std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto filter = to_bson_doc(filter_query.get_fields());
                 auto update = to_bson_doc(update_doc.get_fields());
+                auto mongocxx_opts = options.to_mongocxx();
+
                 bsoncxx::v_noabi::stdx::optional<mongocxx::result::update> result;
                 if (session)
                 {
-                    result = _collection_handle.update_many(session->get(), filter.view(), update.view());
+                    result = _collection_handle.update_many(session->get(), filter.view(), update.view(), mongocxx_opts);
                 }
                 else
                 {
-                    result = _collection_handle.update_many(filter.view(), update.view());
+                    result = _collection_handle.update_many(filter.view(), update.view(), mongocxx_opts);
                 }
 
                 if (result)
@@ -327,7 +338,6 @@ namespace QDB
                 {
                     result = _collection_handle.delete_many(filter.view());
                 }
-
                 if (result)
                 {
                     return result->deleted_count();
@@ -411,6 +421,179 @@ namespace QDB
                 throw QDB::Exception("Failed to execute aggregation: " + std::string(e.what()));
             }
             return results;
+        }
+
+        /**
+         * @brief Finds a single document and updates it in one atomic operation.
+         * @param query The selection criteria for the update.
+         * @param update The modifications to apply.
+         * @param options Options for the operation (e.g., sort, projection, upsert, return_document).
+         * @param session An optional session for transactional context.
+         * @return An std::optional containing the document (either before or after modification), or std::nullopt if no
+         * document was found.
+         */
+        std::optional<T>
+        find_one_and_update(const Query &query, const Update &update,
+                            const FindAndModifyOptions &options = FindAndModifyOptions{},
+                            std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
+        {
+            try
+            {
+                auto filter = to_bson_doc(query.get_fields());
+                auto update_doc = to_bson_doc(update.get_fields());
+
+                mongocxx::options::find_one_and_update mongocxx_opts{};
+                if (!options._sort_builder.view().empty())
+                {
+                    mongocxx_opts.sort(options._sort_builder.view());
+                }
+                if (!options._projection_builder.view().empty())
+                {
+                    mongocxx_opts.projection(options._projection_builder.view());
+                }
+                if (options._upsert.has_value())
+                {
+                    mongocxx_opts.upsert(options._upsert.value());
+                }
+                if (options._return_document.has_value())
+                {
+                    auto rd = (options._return_document.value() == ReturnDocument::kAfter)
+                                  ? mongocxx::options::return_document::k_after
+                                  : mongocxx::options::return_document::k_before;
+                    mongocxx_opts.return_document(rd);
+                }
+
+                bsoncxx::v_noabi::stdx::optional<bsoncxx::document::value> result;
+                if (session)
+                {
+                    result = _collection_handle.find_one_and_update(session->get(), filter.view(), update_doc.view(),
+                                                                    mongocxx_opts);
+                }
+                else
+                {
+                    result = _collection_handle.find_one_and_update(filter.view(), update_doc.view(), mongocxx_opts);
+                }
+
+                if (result)
+                {
+                    return from_bson_doc(result->view());
+                }
+                return std::nullopt;
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("find_one_and_update failed: " + std::string(e.what()));
+            }
+        }
+
+        /**
+         * @brief Finds a single document and replaces it in one atomic operation.
+         * @param query The selection criteria for the replacement.
+         * @param replacement The new document to replace the found one.
+         * @param options Options for the operation (e.g., sort, projection, upsert, return_document).
+         * @param session An optional session for transactional context.
+         * @return An std::optional containing the document (either before or after replacement), or std::nullopt if no
+         * document was found.
+         */
+        std::optional<T>
+        find_one_and_replace(const Query &query, const T &replacement,
+                             const FindAndModifyOptions &options = FindAndModifyOptions{},
+                             std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
+        {
+            try
+            {
+                auto filter = to_bson_doc(query.get_fields());
+                auto replacement_doc = to_bson_doc(replacement.to_fields());
+
+                mongocxx::options::find_one_and_replace mongocxx_opts{};
+                if (!options._sort_builder.view().empty())
+                {
+                    mongocxx_opts.sort(options._sort_builder.view());
+                }
+                if (!options._projection_builder.view().empty())
+                {
+                    mongocxx_opts.projection(options._projection_builder.view());
+                }
+                if (options._upsert.has_value())
+                {
+                    mongocxx_opts.upsert(options._upsert.value());
+                }
+                if (options._return_document.has_value())
+                {
+                    auto rd = (options._return_document.value() == ReturnDocument::kAfter)
+                                  ? mongocxx::options::return_document::k_after
+                                  : mongocxx::options::return_document::k_before;
+                    mongocxx_opts.return_document(rd);
+                }
+
+                bsoncxx::v_noabi::stdx::optional<bsoncxx::document::value> result;
+                if (session)
+                {
+                    result = _collection_handle.find_one_and_replace(session->get(), filter.view(), replacement_doc.view(),
+                                                                     mongocxx_opts);
+                }
+                else
+                {
+                    result = _collection_handle.find_one_and_replace(filter.view(), replacement_doc.view(), mongocxx_opts);
+                }
+
+                if (result)
+                {
+                    return from_bson_doc(result->view());
+                }
+                return std::nullopt;
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("find_one_and_replace failed: " + std::string(e.what()));
+            }
+        }
+
+        /**
+         * @brief Finds a single document and deletes it in one atomic operation.
+         * @param query The selection criteria for the deletion.
+         * @param options Options for the operation (e.g., sort, projection).
+         * @param session An optional session for transactional context.
+         * @return An std::optional containing the deleted document, or std::nullopt if no document was found.
+         */
+        std::optional<T>
+        find_one_and_delete(const Query &query, const FindAndModifyOptions &options = FindAndModifyOptions{},
+                            std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
+        {
+            try
+            {
+                auto filter = to_bson_doc(query.get_fields());
+
+                mongocxx::options::find_one_and_delete mongocxx_opts{};
+                if (!options._sort_builder.view().empty())
+                {
+                    mongocxx_opts.sort(options._sort_builder.view());
+                }
+                if (!options._projection_builder.view().empty())
+                {
+                    mongocxx_opts.projection(options._projection_builder.view());
+                }
+
+                bsoncxx::v_noabi::stdx::optional<bsoncxx::document::value> result;
+                if (session)
+                {
+                    result = _collection_handle.find_one_and_delete(session->get(), filter.view(), mongocxx_opts);
+                }
+                else
+                {
+                    result = _collection_handle.find_one_and_delete(filter.view(), mongocxx_opts);
+                }
+
+                if (result)
+                {
+                    return from_bson_doc(result->view());
+                }
+                return std::nullopt;
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("find_one_and_delete failed: " + std::string(e.what()));
+            }
         }
 
         // --- Index Management ---
@@ -552,7 +735,10 @@ namespace QDB
         }
 
     private:
+        // This unique_ptr owns the client connection, keeping it alive.
         std::unique_ptr<mongocxx::pool::entry> _client_entry;
+
+        // The collection handle itself. It is dependent on the client from _client_entry.
         mongocxx::collection _collection_handle;
     };
 } // namespace QDB

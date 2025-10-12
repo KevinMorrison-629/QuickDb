@@ -1,9 +1,14 @@
 #pragma once
 
+#include "quickdb/components/aggregation.h"
 #include "quickdb/components/field.h"
 
 #include <bsoncxx/builder/basic/document.hpp>
 #include <mongocxx/options/find.hpp>
+#include <mongocxx/options/find_one_and_delete.hpp>
+#include <mongocxx/options/find_one_and_replace.hpp>
+#include <mongocxx/options/find_one_and_update.hpp>
+#include <mongocxx/options/update.hpp>
 #include <optional>
 
 namespace QDB
@@ -54,6 +59,17 @@ namespace QDB
         }
 
         /**
+         * @brief Sets a projection to limit the fields returned in the matching documents.
+         * @param projection_doc A DocumentBuilder object defining the projection.
+         * @return A reference to the current object for chaining.
+         */
+        FindOptions &projection(const DocumentBuilder &projection_doc)
+        {
+            _projection_builder = projection_doc.build().extract();
+            return *this;
+        }
+
+        /**
          * @brief Gets the underlying mongocxx::options::find object.
          * @return The configured mongocxx::options::find object.
          */
@@ -72,12 +88,131 @@ namespace QDB
             {
                 opts.skip(_skip.value());
             }
+            if (_projection_builder)
+            {
+                opts.projection(_projection_builder->view());
+            }
             return opts;
         }
 
     private:
         bsoncxx::builder::basic::document _sort_builder{};
+        std::optional<bsoncxx::document::value> _projection_builder;
         std::optional<int64_t> _limit;
         std::optional<int64_t> _skip;
     };
+
+    /**
+     * @brief A class for specifying options for update operations.
+     */
+    class UpdateOptions
+    {
+    public:
+        UpdateOptions() = default;
+
+        /**
+         * @brief If set to true, a new document is inserted if no document matches the filter.
+         * @param is_upsert True to enable upsert, false to disable.
+         * @return A reference to the current object for chaining.
+         */
+        UpdateOptions &upsert(bool is_upsert)
+        {
+            _upsert = is_upsert;
+            return *this;
+        }
+
+        /**
+         * @brief Gets the underlying mongocxx::options::update object.
+         * @return The configured mongocxx::options::update object.
+         */
+        mongocxx::options::update to_mongocxx() const
+        {
+            mongocxx::options::update opts{};
+            if (_upsert.has_value())
+            {
+                opts.upsert(_upsert.value());
+            }
+            return opts;
+        }
+
+    private:
+        std::optional<bool> _upsert;
+    };
+
+    /**
+     * @brief Specifies whether a find-and-modify operation should return the document
+     * from before the modification or after.
+     */
+    enum class ReturnDocument
+    {
+        kBefore,
+        kAfter
+    };
+
+    /**
+     * @brief A class for specifying options for find-and-modify operations like
+     * find_one_and_update, find_one_and_replace, and find_one_and_delete.
+     */
+    class FindAndModifyOptions
+    {
+    public:
+        FindAndModifyOptions() = default;
+
+        /**
+         * @brief Adds a sort criterion to the operation. The first document found in this order will be modified.
+         * @param key The field to sort by.
+         * @param direction The sort direction (1 for ascending, -1 for descending).
+         * @return A reference to the current object for chaining.
+         */
+        FindAndModifyOptions &sort(const std::string &key, int direction)
+        {
+            _sort_builder.append(bsoncxx::builder::basic::kvp(key, direction));
+            return *this;
+        }
+
+        /**
+         * @brief Adds a field to the projection, limiting the fields returned.
+         * @param field The field to include or exclude.
+         * @param include 1 to include the field, 0 to exclude it.
+         * @return A reference to the current object for chaining.
+         */
+        FindAndModifyOptions &projection(const std::string &field, int include)
+        {
+            _projection_builder.append(bsoncxx::builder::basic::kvp(field, include));
+            return *this;
+        }
+
+        /**
+         * @brief If set to true, a new document is inserted if no document matches the filter.
+         * (Applies to find_one_and_update and find_one_and_replace).
+         * @param is_upsert True to enable upsert, false to disable.
+         * @return A reference to the current object for chaining.
+         */
+        FindAndModifyOptions &upsert(bool is_upsert)
+        {
+            _upsert = is_upsert;
+            return *this;
+        }
+
+        /**
+         * @brief Configures whether to return the document before or after the modification.
+         * (Applies to find_one_and_update and find_one_and_replace).
+         * @param rd kBefore or kAfter. Defaults to kBefore.
+         * @return A reference to the current object for chaining.
+         */
+        FindAndModifyOptions &return_document(ReturnDocument rd)
+        {
+            _return_document = rd;
+            return *this;
+        }
+
+    private:
+        template <typename T> friend class Collection;
+
+        bsoncxx::builder::basic::document _sort_builder{};
+        bsoncxx::builder::basic::document _projection_builder{};
+        std::optional<bool> _upsert;
+        std::optional<ReturnDocument> _return_document;
+    };
+
 } // namespace QDB
