@@ -84,4 +84,23 @@ namespace QDB
         }
     }
 
+    GridFSBucket Database::get_gridfs_bucket(const std::string &db_name, const std::string &bucket_name)
+    {
+        try
+        {
+            auto client_entry = std::make_unique<mongocxx::pool::entry>(m_pool->acquire());
+            auto db = (*(*client_entry))[db_name];
+
+            mongocxx::options::gridfs::bucket bucket_options;
+            bucket_options.bucket_name(bucket_name);
+
+            auto bucket_handle = db.gridfs_bucket(bucket_options);
+            return GridFSBucket(std::move(client_entry), std::move(bucket_handle));
+        }
+        catch (const std::exception &e)
+        {
+            throw QDB::Exception("Failed to get GridFS bucket '" + bucket_name + "': " + std::string(e.what()));
+        }
+    }
+
 } // namespace QDB

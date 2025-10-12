@@ -2,6 +2,7 @@
 
 #include "quickdb/components/collection.h" // Note: May need forward declarations to avoid circular includes
 #include "quickdb/components/exception.h"
+#include "quickdb/components/gridfs.h"
 
 #include <cstdint>
 #include <memory>
@@ -14,6 +15,9 @@
 
 namespace QDB
 {
+    // Forward-declare the GridFSBucket class to avoid including its header here.
+    class GridFSBucket;
+
     class Database
     {
     public:
@@ -57,6 +61,14 @@ namespace QDB
          * @throws QDB::Exception if the transaction fails to start, commit, or abort.
          */
         void with_transaction(std::function<void(mongocxx::client_session &session)> callback);
+
+        /**
+         * @brief The factory method for getting a GridFS bucket handle.
+         * @param db_name The name of the database to use for GridFS.
+         * @param bucket_name The optional name of the bucket. Defaults to "fs".
+         * @return A GridFSBucket object for file operations.
+         */
+        GridFSBucket get_gridfs_bucket(const std::string &db_name, const std::string &bucket_name = "fs");
 
     private:
         static mongocxx::instance &get_instance();
