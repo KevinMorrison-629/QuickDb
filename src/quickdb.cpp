@@ -59,4 +59,29 @@ namespace QDB
 
     Database::~Database() = default; // Default destructor is fine with unique_ptr
 
+    void Database::with_transaction(std::function<void(mongocxx::client_session &session)> callback)
+    {
+        // Acquire a client from the pool for the scope of this transaction.
+        auto client = m_pool->acquire();
+        // A session must be started on a specific client.
+        auto session = client->start_session();
+
+        try
+        {
+            // The user's operations are executed within a transaction context.
+            session.with_transaction(
+                [&](mongocxx::client_session *callback_session)
+                {
+                    // The mongocxx driver provides a raw pointer here, we pass it as a reference.
+                    callback(*callback_session);
+                });
+        }
+        catch (const std::exception &e)
+        {
+            // If anything inside the lambda fails, mongocxx driver aborts the transaction
+            // and throws an exception. We wrap it in our own exception type.
+            throw QDB::Exception("Transaction failed: " + std::string(e.what()));
+        }
+    }
+
 } // namespace QDB

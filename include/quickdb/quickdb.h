@@ -41,6 +41,23 @@ namespace QDB
             return Collection<T>(std::move(client_entry), collection_handle);
         }
 
+        /**
+         * @brief Executes a series of operations within a transaction.
+         *
+         * This method handles the entire lifecycle of a transaction. It starts a session,
+         * begins a transaction, executes the user-provided callback, and then attempts
+         * to commit. If the callback throws an exception, the transaction is automatically
+         * aborted. This ensures atomicity for all operations within the callback.
+         *
+         * @param callback A function object that takes a `mongocxx::client_session&` and
+         * contains the database operations to be executed atomically. All
+         * collection methods called within this callback MUST be passed the
+         * session object to be part of the transaction.
+         *
+         * @throws QDB::Exception if the transaction fails to start, commit, or abort.
+         */
+        void with_transaction(std::function<void(mongocxx::client_session &session)> callback);
+
     private:
         static mongocxx::instance &get_instance();
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "quickdb/components/aggregation.h"
 #include "quickdb/components/document.h"
 #include "quickdb/components/exception.h"
 #include "quickdb/components/field.h"
@@ -8,6 +9,7 @@
 #include "quickdb/components/update.h"
 
 // Standard library includes
+#include <functional> // For std::reference_wrapper
 #include <iostream>
 #include <optional>
 #include <type_traits>
@@ -18,12 +20,19 @@
 #include <mongocxx/client.hpp>
 #include <mongocxx/collection.hpp>
 #include <mongocxx/cursor.hpp>
+#include <mongocxx/index_view.hpp>
 #include <mongocxx/options/find.hpp>
 #include <mongocxx/pool.hpp>
 #include <mongocxx/result/delete.hpp>
 #include <mongocxx/result/insert_many.hpp>
 #include <mongocxx/result/insert_one.hpp>
 #include <mongocxx/result/update.hpp>
+
+// Forward-declare client_session
+namespace mongocxx
+{
+    class client_session;
+}
 
 namespace QDB
 {
@@ -44,14 +53,23 @@ namespace QDB
         /**
          * @brief Creates a single document in the collection.
          * @param doc The document object to insert.
-         * @return The number of documents inserted (1 on success, 0 on failure).
+         * @param session An optional session to use for the operation.
+         * @return The number of documents inserted (1 on success).
          */
-        int64_t create_one(T &doc)
+        int64_t create_one(T &doc, std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto bson_doc = to_bson_doc(doc.to_fields());
-                auto result = _collection_handle.insert_one(bson_doc.view());
+                bsoncxx::v_noabi::stdx::optional<mongocxx::result::insert_one> result;
+                if (session)
+                {
+                    result = _collection_handle.insert_one(session->get(), bson_doc.view());
+                }
+                else
+                {
+                    result = _collection_handle.insert_one(bson_doc.view());
+                }
 
                 if (result)
                 {
@@ -62,17 +80,18 @@ namespace QDB
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to create document: " << e.what() << std::endl;
-                return 0;
+                throw QDB::Exception("Failed to create document: " + std::string(e.what()));
             }
         }
 
         /**
          * @brief Creates multiple documents in the collection.
          * @param docs A vector of document objects to insert.
+         * @param session An optional session to use for the operation.
          * @return The number of documents inserted.
          */
-        int64_t create_many(std::vector<T> &docs)
+        int64_t create_many(std::vector<T> &docs,
+                            std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             if (docs.empty())
                 return 0;
@@ -86,7 +105,16 @@ namespace QDB
                     bson_docs.push_back(to_bson_doc(doc.to_fields()));
                 }
 
-                auto result = _collection_handle.insert_many(bson_docs);
+                bsoncxx::v_noabi::stdx::optional<mongocxx::result::insert_many> result;
+                if (session)
+                {
+                    result = _collection_handle.insert_many(session->get(), bson_docs);
+                }
+                else
+                {
+                    result = _collection_handle.insert_many(bson_docs);
+                }
+
                 if (result)
                 {
                     const auto &inserted_ids = result->inserted_ids();
@@ -103,8 +131,7 @@ namespace QDB
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to create many documents: " << e.what() << std::endl;
-                return 0;
+                throw QDB::Exception("Failed to create many documents: " + std::string(e.what()));
             }
         }
 
@@ -112,14 +139,25 @@ namespace QDB
          * @brief Finds a single document matching the query.
          * @param query The query filter.
          * @param options The find options (e.g., sort, projection).
+         * @param session An optional session to use for the operation.
          * @return An std::optional containing the found document, or std::nullopt.
          */
-        std::optional<T> find_one(const Query &query, const FindOptions &options = FindOptions{})
+        std::optional<T> find_one(const Query &query, const FindOptions &options = FindOptions{},
+                                  std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto filter = to_bson_doc(query.get_fields());
-                auto result = _collection_handle.find_one(filter.view(), options.to_mongocxx());
+                bsoncxx::v_noabi::stdx::optional<bsoncxx::document::value> result;
+                if (session)
+                {
+                    result = _collection_handle.find_one(session->get(), filter.view(), options.to_mongocxx());
+                }
+                else
+                {
+                    result = _collection_handle.find_one(filter.view(), options.to_mongocxx());
+                }
+
                 if (result)
                 {
                     return from_bson_doc(result->view());
@@ -128,8 +166,7 @@ namespace QDB
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to find one document: " << e.what() << std::endl;
-                return std::nullopt;
+                throw QDB::Exception("Failed to find one document: " + std::string(e.what()));
             }
         }
 
@@ -137,15 +174,20 @@ namespace QDB
          * @brief Finds all documents matching the query.
          * @param query The query filter.
          * @param options The find options (e.g., sort, limit, skip).
+         * @param session An optional session to use for the operation.
          * @return A std::vector of documents.
          */
-        std::vector<T> find_many(const Query &query, const FindOptions &options = FindOptions{})
+        std::vector<T> find_many(const Query &query, const FindOptions &options = FindOptions{},
+                                 std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             std::vector<T> results;
             try
             {
                 auto filter = to_bson_doc(query.get_fields());
-                mongocxx::cursor cursor = _collection_handle.find(filter.view(), options.to_mongocxx());
+                mongocxx::cursor cursor = session
+                                              ? _collection_handle.find(session->get(), filter.view(), options.to_mongocxx())
+                                              : _collection_handle.find(filter.view(), options.to_mongocxx());
+
                 for (const auto &view : cursor)
                 {
                     results.push_back(from_bson_doc(view));
@@ -153,7 +195,7 @@ namespace QDB
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to find many documents: " << e.what() << std::endl;
+                throw QDB::Exception("Failed to find many documents: " + std::string(e.what()));
             }
             return results;
         }
@@ -162,15 +204,26 @@ namespace QDB
          * @brief Updates a single document that matches the filter.
          * @param filter_query A Query object defining which document to update.
          * @param update_doc An Update object defining the update operations.
+         * @param session An optional session to use for the operation.
          * @return The number of documents modified.
          */
-        int64_t update_one(const Query &filter_query, const Update &update_doc)
+        int64_t update_one(const Query &filter_query, const Update &update_doc,
+                           std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto filter = to_bson_doc(filter_query.get_fields());
                 auto update = to_bson_doc(update_doc.get_fields());
-                auto result = _collection_handle.update_one(filter.view(), update.view());
+                bsoncxx::v_noabi::stdx::optional<mongocxx::result::update> result;
+                if (session)
+                {
+                    result = _collection_handle.update_one(session->get(), filter.view(), update.view());
+                }
+                else
+                {
+                    result = _collection_handle.update_one(filter.view(), update.view());
+                }
+
                 if (result)
                 {
                     return result->modified_count();
@@ -179,8 +232,7 @@ namespace QDB
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to update one document: " << e.what() << std::endl;
-                return 0;
+                throw QDB::Exception("Failed to update one document: " + std::string(e.what()));
             }
         }
 
@@ -188,15 +240,26 @@ namespace QDB
          * @brief Updates all documents that match the filter.
          * @param filter_query A Query object defining which documents to update.
          * @param update_doc An Update object defining the update operations.
+         * @param session An optional session to use for the operation.
          * @return The number of documents modified.
          */
-        int64_t update_many(const Query &filter_query, const Update &update_doc)
+        int64_t update_many(const Query &filter_query, const Update &update_doc,
+                            std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto filter = to_bson_doc(filter_query.get_fields());
                 auto update = to_bson_doc(update_doc.get_fields());
-                auto result = _collection_handle.update_many(filter.view(), update.view());
+                bsoncxx::v_noabi::stdx::optional<mongocxx::result::update> result;
+                if (session)
+                {
+                    result = _collection_handle.update_many(session->get(), filter.view(), update.view());
+                }
+                else
+                {
+                    result = _collection_handle.update_many(filter.view(), update.view());
+                }
+
                 if (result)
                 {
                     return result->modified_count();
@@ -205,22 +268,32 @@ namespace QDB
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to update many documents: " << e.what() << std::endl;
-                return 0;
+                throw QDB::Exception("Failed to update many documents: " + std::string(e.what()));
             }
         }
 
         /**
          * @brief Deletes a single document that matches the filter.
          * @param query The query filter.
+         * @param session An optional session to use for the operation.
          * @return The number of documents deleted.
          */
-        int64_t delete_one(const Query &query)
+        int64_t delete_one(const Query &query,
+                           std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto filter = to_bson_doc(query.get_fields());
-                auto result = _collection_handle.delete_one(filter.view());
+                bsoncxx::v_noabi::stdx::optional<mongocxx::result::delete_result> result;
+                if (session)
+                {
+                    result = _collection_handle.delete_one(session->get(), filter.view());
+                }
+                else
+                {
+                    result = _collection_handle.delete_one(filter.view());
+                }
+
                 if (result)
                 {
                     return result->deleted_count();
@@ -229,22 +302,32 @@ namespace QDB
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to delete one document: " << e.what() << std::endl;
-                return 0;
+                throw QDB::Exception("Failed to delete one document: " + std::string(e.what()));
             }
         }
 
         /**
          * @brief Deletes all documents that match the filter.
          * @param query The query filter.
+         * @param session An optional session to use for the operation.
          * @return The number of documents deleted.
          */
-        int64_t delete_many(const Query &query)
+        int64_t delete_many(const Query &query,
+                            std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto filter = to_bson_doc(query.get_fields());
-                auto result = _collection_handle.delete_many(filter.view());
+                bsoncxx::v_noabi::stdx::optional<mongocxx::result::delete_result> result;
+                if (session)
+                {
+                    result = _collection_handle.delete_many(session->get(), filter.view());
+                }
+                else
+                {
+                    result = _collection_handle.delete_many(filter.view());
+                }
+
                 if (result)
                 {
                     return result->deleted_count();
@@ -253,27 +336,188 @@ namespace QDB
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to delete many documents: " << e.what() << std::endl;
-                return 0;
+                throw QDB::Exception("Failed to delete many documents: " + std::string(e.what()));
             }
         }
 
         /**
          * @brief Counts the number of documents matching the filter.
          * @param query The query filter.
+         * @param session An optional session to use for the operation.
          * @return The number of matching documents.
          */
-        int64_t count_documents(const Query &query = Query{})
+        int64_t count_documents(const Query &query = Query{},
+                                std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
             {
                 auto filter = to_bson_doc(query.get_fields());
-                return _collection_handle.count_documents(filter.view());
+                if (session)
+                {
+                    return _collection_handle.count_documents(session->get(), filter.view());
+                }
+                else
+                {
+                    return _collection_handle.count_documents(filter.view());
+                }
             }
             catch (const std::exception &e)
             {
-                std::cerr << "Failed to count documents: " << e.what() << std::endl;
-                return 0;
+                throw QDB::Exception("Failed to count documents: " + std::string(e.what()));
+            }
+        }
+
+        /**
+         * @brief Executes an aggregation pipeline.
+         * @tparam ResultType The Document subclass to deserialize results into. Defaults to T.
+         * @param aggregation The Aggregation object defining the pipeline.
+         * @param session An optional session to use for the operation.
+         * @return A std::vector of ResultType documents.
+         */
+        template <typename ResultType = T>
+        std::vector<ResultType>
+        aggregate(const Aggregation &aggregation,
+                  std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
+        {
+            static_assert(std::is_base_of_v<Document, ResultType>, "ResultType must be a subclass of QDB::Document");
+
+            std::vector<ResultType> results;
+            try
+            {
+                mongocxx::cursor cursor = session ? _collection_handle.aggregate(session->get(), aggregation.to_mongocxx())
+                                                  : _collection_handle.aggregate(aggregation.to_mongocxx());
+                for (const auto &view : cursor)
+                {
+                    ResultType doc;
+                    std::unordered_map<std::string, FieldValue> fields;
+                    for (const auto &element : view)
+                    {
+                        std::string key = static_cast<std::string>(element.key());
+                        if (key == "_id" && element.type() == bsoncxx::type::k_oid)
+                        {
+                            doc._id = element.get_oid().value;
+                        }
+                        else
+                        {
+                            fields[key] = fromBsonElement(element);
+                        }
+                    }
+                    doc.from_fields(fields);
+                    results.push_back(doc);
+                }
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("Failed to execute aggregation: " + std::string(e.what()));
+            }
+            return results;
+        }
+
+        // --- Index Management ---
+
+        /**
+         * @brief Creates a single-field index.
+         * @param field The name of the field to index.
+         * @param ascending True for an ascending index (1), false for descending (-1).
+         * @return The name of the created index.
+         */
+        std::string create_index(const std::string &field, bool ascending = true)
+        {
+            try
+            {
+                bsoncxx::builder::basic::document keys;
+                keys.append(bsoncxx::builder::basic::kvp(field, ascending ? 1 : -1));
+                auto result = _collection_handle.indexes().create_one(keys.view());
+                if (auto ele = result["name"]; ele && ele.type() == bsoncxx::type::k_string)
+                {
+                    return std::string(ele.get_string().value);
+                }
+                return field + (ascending ? "_1" : "_-1");
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("Failed to create index: " + std::string(e.what()));
+            }
+        }
+
+        /**
+         * @brief Creates a compound index on multiple fields.
+         * @param fields A vector of pairs, where each pair contains the field name and a boolean for ascending order.
+         * @return The name of the created index.
+         */
+        std::string create_compound_index(const std::vector<std::pair<std::string, bool>> &fields)
+        {
+            if (fields.empty())
+            {
+                throw QDB::Exception("Cannot create a compound index with no fields.");
+            }
+            try
+            {
+                bsoncxx::builder::basic::document keys;
+                for (const auto &field_pair : fields)
+                {
+                    keys.append(bsoncxx::builder::basic::kvp(field_pair.first, field_pair.second ? 1 : -1));
+                }
+                auto result = _collection_handle.indexes().create_one(keys.view());
+                if (auto ele = result["name"]; ele && ele.type() == bsoncxx::type::k_string)
+                {
+                    return std::string(ele.get_string().value);
+                }
+                std::string generated_name;
+                for (const auto &field_pair : fields)
+                {
+                    generated_name += field_pair.first + (field_pair.second ? "_1_" : "_-1_");
+                }
+                if (!generated_name.empty())
+                {
+                    generated_name.pop_back();
+                }
+                return generated_name;
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("Failed to create compound index: " + std::string(e.what()));
+            }
+        }
+
+        /**
+         * @brief Drops a specific index by name.
+         * @param index_name The name of the index to drop.
+         */
+        void drop_index(const std::string &index_name)
+        {
+            try
+            {
+                _collection_handle.indexes().drop_one(index_name);
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("Failed to drop index '" + index_name + "': " + std::string(e.what()));
+            }
+        }
+
+        /**
+         * @brief Lists the names of all indexes on the collection.
+         * @return A vector of strings, where each string is an index name.
+         */
+        std::vector<std::string> list_indexes()
+        {
+            std::vector<std::string> index_names;
+            try
+            {
+                auto cursor = _collection_handle.indexes().list();
+                for (const auto &doc : cursor)
+                {
+                    if (auto ele = doc["name"]; ele && ele.type() == bsoncxx::type::k_string)
+                    {
+                        index_names.emplace_back(ele.get_string().value);
+                    }
+                }
+                return index_names;
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("Failed to list indexes: " + std::string(e.what()));
             }
         }
 
@@ -308,10 +552,7 @@ namespace QDB
         }
 
     private:
-        // This unique_ptr owns the client connection, keeping it alive.
         std::unique_ptr<mongocxx::pool::entry> _client_entry;
-
-        // The collection handle itself. It is dependent on the client from _client_entry.
         mongocxx::collection _collection_handle;
     };
 } // namespace QDB

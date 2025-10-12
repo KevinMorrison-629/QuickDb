@@ -42,6 +42,40 @@ namespace QDB
         }
 
         /**
+         * @brief Creates a logical OR query from a list of queries.
+         * @param queries An initializer list of Query objects.
+         * @return A new Query object representing the $or condition.
+         */
+        static Query Or(const std::initializer_list<Query> &queries)
+        {
+            Query q;
+            std::vector<FieldValue> query_docs;
+            for (const auto &query : queries)
+            {
+                query_docs.emplace_back(query.get_fields());
+            }
+            q._query_map["$or"] = FieldValue(query_docs);
+            return q;
+        }
+
+        /**
+         * @brief Creates a logical AND query from a list of queries.
+         * @param queries An initializer list of Query objects.
+         * @return A new Query object representing the $and condition.
+         */
+        static Query And(const std::initializer_list<Query> &queries)
+        {
+            Query q;
+            std::vector<FieldValue> query_docs;
+            for (const auto &query : queries)
+            {
+                query_docs.emplace_back(query.get_fields());
+            }
+            q._query_map["$and"] = FieldValue(query_docs);
+            return q;
+        }
+
+        /**
          * @brief Adds an equality condition to the query.
          * @tparam T The type of the value.
          * @param field The document field to match.
@@ -110,6 +144,57 @@ namespace QDB
                 fv_vector.emplace_back(val);
             }
             add_operator_condition(field, "$in", FieldValue(fv_vector));
+            return *this;
+        }
+
+        /**
+         * @brief Adds an "all" ($all) condition to match arrays containing all specified elements.
+         */
+        template <typename T> Query &all(const std::string &field, const std::vector<T> &values)
+        {
+            std::vector<FieldValue> fv_vector;
+            for (const auto &val : values)
+            {
+                fv_vector.emplace_back(val);
+            }
+            add_operator_condition(field, "$all", FieldValue(fv_vector));
+            return *this;
+        }
+
+        /**
+         * @brief Adds an "exists" ($exists) condition.
+         * @param field The document field to check for existence.
+         * @param value True to check for existence, false for non-existence.
+         */
+        Query &exists(const std::string &field, bool value = true)
+        {
+            add_operator_condition(field, "$exists", FieldValue(value));
+            return *this;
+        }
+
+        /**
+         * @brief Adds a "modulo" ($mod) condition.
+         * @param field The field to test.
+         * @param divisor The divisor for the modulo operation.
+         * @param remainder The remainder to match.
+         */
+        Query &mod(const std::string &field, int64_t divisor, int64_t remainder)
+        {
+            std::vector<FieldValue> fv_vector;
+            fv_vector.emplace_back(divisor);
+            fv_vector.emplace_back(remainder);
+            add_operator_condition(field, "$mod", FieldValue(fv_vector));
+            return *this;
+        }
+
+        /**
+         * @brief Adds an "element match" ($elemMatch) condition for arrays.
+         * @param field The array field to query.
+         * @param query The query to apply to elements of the array.
+         */
+        Query &elemMatch(const std::string &field, const Query &query)
+        {
+            add_operator_condition(field, "$elemMatch", FieldValue(query.get_fields()));
             return *this;
         }
 

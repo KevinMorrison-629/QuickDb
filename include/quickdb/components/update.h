@@ -77,6 +77,17 @@ namespace QDB
         }
 
         /**
+         * @brief Adds a "$pullAll" operation to remove all instances of the specified values from an array.
+         * @param field The array field to modify.
+         * @param values A vector of values to remove from the array.
+         */
+        template <typename T> Update &pullAll(const std::string &field, const std::vector<T> &values)
+        {
+            add_operator_field("$pullAll", field, FieldValue(values));
+            return *this;
+        }
+
+        /**
          * @brief Adds an "$addToSet" operation to the update.
          * @param field The array field to modify.
          * @param value The value to add to the set.
@@ -84,6 +95,24 @@ namespace QDB
         template <typename T> Update &add_to_set(const std::string &field, const T &value)
         {
             add_operator_field("$addToSet", field, FieldValue(value));
+            return *this;
+        }
+
+        /**
+         * @brief Adds a "$bit" operation to perform bitwise AND, OR, and XOR updates.
+         * @param field The field to update.
+         * @param operation The bitwise operation to perform ("and", "or", or "xor").
+         * @param value The integer value to use in the bitwise operation.
+         */
+        Update &bit(const std::string &field, const std::string &operation, int32_t value)
+        {
+            if (operation != "and" && operation != "or" && operation != "xor")
+            {
+                // For safety, you might want to throw an exception for invalid operations
+                return *this;
+            }
+            std::unordered_map<std::string, FieldValue> bit_op_map = {{operation, FieldValue(value)}};
+            add_operator_field("$bit", field, FieldValue(bit_op_map));
             return *this;
         }
 

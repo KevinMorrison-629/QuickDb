@@ -123,6 +123,72 @@ namespace QDB
         }
 
         /**
+         * @brief Adds a $lookup (left outer join) stage to the pipeline.
+         * @param from The target collection to join with.
+         * @param local_field The field from the input documents.
+         * @param foreign_field The field from the documents of the "from" collection.
+         * @param as The output array field name.
+         * @return A reference to the current Aggregation object for chaining.
+         */
+        Aggregation &lookup(const std::string &from, const std::string &local_field, const std::string &foreign_field,
+                            const std::string &as)
+        {
+            DocumentBuilder lookup_doc;
+            lookup_doc.add_field("from", FieldValue(from));
+            lookup_doc.add_field("localField", FieldValue(local_field));
+            lookup_doc.add_field("foreignField", FieldValue(foreign_field));
+            lookup_doc.add_field("as", FieldValue(as));
+            _pipeline.lookup(lookup_doc.build().view());
+            return *this;
+        }
+
+        /**
+         * @brief Adds an $unwind stage to deconstruct an array field.
+         * @param field The field path to an array field (e.g., "$items").
+         * @return A reference to the current Aggregation object for chaining.
+         */
+        Aggregation &unwind(const std::string &field)
+        {
+            bsoncxx::builder::basic::document unwind_doc;
+            unwind_doc.append(bsoncxx::builder::basic::kvp("path", field));
+            _pipeline.unwind(unwind_doc.view());
+            return *this;
+        }
+
+        /**
+         * @brief Adds a $limit stage to the pipeline.
+         * @param limit The maximum number of documents to pass to the next stage.
+         * @return A reference to the current Aggregation object for chaining.
+         */
+        Aggregation &limit(int64_t limit)
+        {
+            _pipeline.limit(limit);
+            return *this;
+        }
+
+        /**
+         * @brief Adds a $skip stage to the pipeline.
+         * @param skip The number of documents to skip.
+         * @return A reference to the current Aggregation object for chaining.
+         */
+        Aggregation &skip(int64_t skip)
+        {
+            _pipeline.skip(skip);
+            return *this;
+        }
+
+        /**
+         * @brief Adds a $count stage to the pipeline.
+         * @param output_field The name of the output field that will contain the count.
+         * @return A reference to the current Aggregation object for chaining.
+         */
+        Aggregation &count(const std::string &output_field)
+        {
+            _pipeline.count(output_field);
+            return *this;
+        }
+
+        /**
          * @brief Gets the underlying mongocxx::pipeline object.
          * @return The configured mongocxx::pipeline.
          */
