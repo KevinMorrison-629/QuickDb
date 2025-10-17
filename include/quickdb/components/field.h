@@ -85,12 +85,12 @@ namespace QDB
     /// @brief Specialization of type_to_fieldtype for const char*.
     template <> struct type_to_fieldtype<const char *>
     {
-        static constexpr FieldType value = FieldType::FT_STRING;
+        static constexpr FieldType value = FieldType::FT_STRING; ///< Corresponding FieldType.
     };
     /// @brief Specialization of type_to_fieldtype for char*.
     template <> struct type_to_fieldtype<char *>
     {
-        static constexpr FieldType value = FieldType::FT_STRING;
+        static constexpr FieldType value = FieldType::FT_STRING; ///< Corresponding FieldType.
     };
     /// @brief Specialization of type_to_fieldtype for bsoncxx::types::b_timestamp.
     template <> struct type_to_fieldtype<bsoncxx::types::b_timestamp>
@@ -136,9 +136,11 @@ namespace QDB
                                       std::unordered_map<std::string, FieldValue> // For FT_OBJECT
                                       >;
 
+    /// @brief Type trait to check if a type is a std::vector.
     template <typename> struct is_std_vector : std::false_type
     {
     };
+    /// @brief Specialization of is_std_vector for std::vector.
     template <typename T, typename A> struct is_std_vector<std::vector<T, A>> : std::true_type
     {
     };
@@ -157,19 +159,22 @@ namespace QDB
         /// @param _val The FieldVariant holding the actual data for this field.
         FieldValue(const FieldType &_type, const FieldVariant &_val) : type(_type), value(_val) {}
 
-        // This template constructor allows for creating a FieldValue from a raw C++ type.
-        // The SFINAE guard (std::enable_if_t) prevents this constructor from being chosen
-        // during copy/move construction, which can prevent certain ambiguous overload errors.
+        /// @brief Template constructor for creating a FieldValue from a raw C++ type.
+        /// @tparam T The type of the value.
+        /// @param val The value to store.
         template <typename T, typename = std::enable_if_t<!std::is_same_v<std::decay_t<T>, FieldValue>>>
         FieldValue(const T &val) : type(type_to_fieldtype<std::decay_t<T>>::value), value(val){};
 
         /// @brief Constructs a FieldValue from a std::chrono::system_clock::time_point, converting it to a b_date.
+        /// @param tp The time point to store.
         FieldValue(const std::chrono::system_clock::time_point &tp)
             : type(FieldType::FT_DATE), value(bsoncxx::types::b_date{tp})
         {
         }
 
-        /// @brief Template constructor to automatically handle std::vector<T>
+        /// @brief Template constructor to automatically handle std::vector<T>.
+        /// @tparam T The inner type of the vector.
+        /// @param vec The vector of values.
         template <typename T> FieldValue(const std::vector<T> &vec) : type(FieldType::FT_ARRAY)
         {
             std::vector<FieldValue> fv_vector;
@@ -191,6 +196,8 @@ namespace QDB
         }
 
         /// @brief Template method to get the value as a specific type T.
+        /// @tparam T The desired type.
+        /// @return The value cast to type T. Returns a default-constructed T on failure.
         template <typename T> T as() const
         {
             if constexpr (std::is_same_v<T, FieldValue>)
@@ -257,6 +264,7 @@ namespace QDB
     };
 
     /// @brief Equality operator for FieldValue.
+    ///
     /// Compares two FieldValue objects for equality. Primarily intended for simple types.
     /// For complex types like arrays or objects, this performs a direct comparison of the variant's content,
     /// which might not be a deep comparison depending on the underlying types' operator==.
@@ -281,11 +289,9 @@ namespace QDB
     static void AppendToArray(bsoncxx::builder::basic::array &arr, const FieldValue &fv);
     template <typename BsonElement> static FieldValue fromBsonElement(const BsonElement &element);
 
-    /**
-     * @brief Appends a FieldValue to a BSON array builder.
-     * @param arr The BSON array builder to append to.
-     * @param fv The FieldValue to append.
-     */
+    /// @brief Appends a FieldValue to a BSON array builder.
+    /// @param arr The BSON array builder to append to.
+    /// @param fv The FieldValue to append.
     static void AppendToArray(bsoncxx::builder::basic::array &arr, const FieldValue &fv)
     {
         using namespace bsoncxx::builder::basic;
@@ -365,12 +371,10 @@ namespace QDB
         }
     }
 
-    /**
-     * @brief Appends a key-FieldValue pair to a BSON document builder.
-     * @param doc The BSON document builder to append to.
-     * @param key The key for the new element.
-     * @param fv The FieldValue to append.
-     */
+    /// @brief Appends a key-FieldValue pair to a BSON document builder.
+    /// @param doc The BSON document builder to append to.
+    /// @param key The key for the new element.
+    /// @param fv The FieldValue to append.
     static void AppendToDocument(bsoncxx::builder::basic::document &doc, const std::string &key, const FieldValue &fv)
     {
         using namespace bsoncxx::builder::basic;
@@ -452,12 +456,10 @@ namespace QDB
         }
     }
 
-    /**
-     * @brief Converts any BSON element to a FieldValue.
-     * @tparam BsonElement Can be bsoncxx::document::element or bsoncxx::array::element.
-     * @param element The BSON element to convert.
-     * @return The resulting FieldValue.
-     */
+    /// @brief Converts any BSON element to a FieldValue.
+    /// @tparam BsonElement Can be bsoncxx::document::element or bsoncxx::array::element.
+    /// @param element The BSON element to convert.
+    /// @return The resulting FieldValue.
     template <typename BsonElement> static FieldValue fromBsonElement(const BsonElement &element)
     {
         FieldValue fv;

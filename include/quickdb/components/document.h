@@ -14,15 +14,18 @@ namespace QDB
     // forward declare the Collection class
     template <typename T> class Collection;
 
+    /// @brief Base class for all document models.
     class Document
     {
     public:
         virtual ~Document() = default;
 
-        // User must implement this to convert their class members into a map of FieldValues.
+        /// @brief User must implement this to convert their class members into a map of FieldValues.
+        /// @return A map of field names to FieldValue objects.
         virtual std::unordered_map<std::string, FieldValue> to_fields() const = 0;
 
-        // User must implement this to populate their class members from a map of FieldValues.
+        /// @brief User must implement this to populate their class members from a map of FieldValues.
+        /// @param fields The map of fields from the database.
         virtual void from_fields(const std::unordered_map<std::string, FieldValue> &fields) = 0;
 
         /// @brief Gets the document's ObjectId as a hex string.
@@ -41,7 +44,7 @@ namespace QDB
 
         template <typename T> friend class Collection;
 
-        // Automatically managed by the library
+        /// @brief The document's unique identifier, managed by the library.
         bsoncxx::oid _id;
     };
 

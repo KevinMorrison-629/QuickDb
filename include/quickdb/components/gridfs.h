@@ -15,28 +15,22 @@
 
 namespace QDB
 {
-    /**
-     * @brief A class for interacting with a MongoDB GridFS bucket for large file storage.
-     */
+    /// @brief A class for interacting with a MongoDB GridFS bucket for large file storage.
     class GridFSBucket
     {
     public:
-        /**
-         * @brief Constructs a GridFSBucket handler. This is typically created via Database::get_gridfs_bucket().
-         * @param client_entry A unique_ptr to the connection pool entry.
-         * @param bucket The underlying mongocxx bucket handle.
-         */
+        /// @brief Constructs a GridFSBucket handler. This is typically created via Database::get_gridfs_bucket().
+        /// @param client_entry A unique_ptr to the connection pool entry.
+        /// @param bucket The underlying mongocxx bucket handle.
         GridFSBucket(std::unique_ptr<mongocxx::pool::entry> client_entry, mongocxx::gridfs::bucket bucket)
             : _client_entry(std::move(client_entry)), _bucket(std::move(bucket))
         {
         }
 
-        /**
-         * @brief Uploads a file from the local filesystem to GridFS using streams.
-         * @param filename The name of the file to store in GridFS.
-         * @param source_path The local path to the file to be uploaded.
-         * @return The ObjectId of the newly created file in GridFS.
-         */
+        /// @brief Uploads a file from the local filesystem to GridFS using streams.
+        /// @param filename The name of the file to store in GridFS.
+        /// @param source_path The local path to the file to be uploaded.
+        /// @return The ObjectId of the newly created file in GridFS.
         bsoncxx::oid upload_from_file(const std::string &filename, const std::string &source_path)
         {
             try
@@ -68,11 +62,9 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Downloads a file from GridFS to the local filesystem using streams.
-         * @param file_id The ObjectId of the file to download.
-         * @param destination_path The local path where the file will be saved.
-         */
+        /// @brief Downloads a file from GridFS to the local filesystem using streams.
+        /// @param file_id The ObjectId of the file to download.
+        /// @param destination_path The local path where the file will be saved.
         void download_to_file(bsoncxx::oid file_id, const std::string &destination_path)
         {
             try
@@ -105,10 +97,8 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Deletes a file and its associated chunks from GridFS.
-         * @param file_id The ObjectId of the file to delete.
-         */
+        /// @brief Deletes a file and its associated chunks from GridFS.
+        /// @param file_id The ObjectId of the file to delete.
         void delete_file(bsoncxx::oid file_id)
         {
             try
@@ -124,10 +114,10 @@ namespace QDB
         }
 
     private:
-        // This unique_ptr owns the client connection, keeping it alive.
+        /// @brief This unique_ptr owns the client connection, keeping it alive.
         std::unique_ptr<mongocxx::pool::entry> _client_entry;
 
-        // The bucket handle itself. It is dependent on the client from _client_entry.
+        /// @brief The bucket handle itself. It is dependent on the client from _client_entry.
         mongocxx::gridfs::bucket _bucket;
     };
 } // namespace QDB

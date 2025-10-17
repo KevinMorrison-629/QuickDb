@@ -39,26 +39,25 @@ namespace mongocxx
 
 namespace QDB
 {
-    /**
-     * @brief A template class providing a type-safe wrapper around a mongocxx::collection.
-     * @tparam T A class that inherits from QDB::Document.
-     */
+    /// @brief A template class providing a type-safe wrapper around a mongocxx::collection.
+    /// @tparam T A class that inherits from QDB::Document.
     template <typename T> class Collection
     {
         static_assert(std::is_base_of_v<Document, T>, "Template argument T must be a subclass of QDB::Document");
 
     public:
+        /// @brief Constructs a Collection handler.
+        /// @param client_entry A unique_ptr to the connection pool entry.
+        /// @param collection_handle The underlying mongocxx collection handle.
         Collection(std::unique_ptr<mongocxx::pool::entry> client_entry, mongocxx::collection collection_handle)
             : _client_entry(std::move(client_entry)), _collection_handle(std::move(collection_handle))
         {
         }
 
-        /**
-         * @brief Creates a single document in the collection.
-         * @param doc The document object to insert.
-         * @param session An optional session to use for the operation.
-         * @return The number of documents inserted (1 on success).
-         */
+        /// @brief Creates a single document in the collection.
+        /// @param doc The document object to insert.
+        /// @param session An optional session to use for the operation.
+        /// @return The number of documents inserted (1 on success).
         int64_t create_one(T &doc, std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
             try
@@ -87,12 +86,10 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Creates multiple documents in the collection.
-         * @param docs A vector of document objects to insert.
-         * @param session An optional session to use for the operation.
-         * @return The number of documents inserted.
-         */
+        /// @brief Creates multiple documents in the collection.
+        /// @param docs A vector of document objects to insert.
+        /// @param session An optional session to use for the operation.
+        /// @return The number of documents inserted.
         int64_t create_many(std::vector<T> &docs,
                             std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
@@ -138,13 +135,11 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Finds a single document matching the query.
-         * @param query The query filter.
-         * @param options The find options (e.g., sort, projection).
-         * @param session An optional session to use for the operation.
-         * @return An std::optional containing the found document, or std::nullopt.
-         */
+        /// @brief Finds a single document matching the query.
+        /// @param query The query filter.
+        /// @param options The find options (e.g., sort, projection).
+        /// @param session An optional session to use for the operation.
+        /// @return An std::optional containing the found document, or std::nullopt.
         std::optional<T> find_one(const Query &query, const FindOptions &options = FindOptions{},
                                   std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
@@ -173,13 +168,11 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Finds all documents matching the query.
-         * @param query The query filter.
-         * @param options The find options (e.g., sort, limit, skip).
-         * @param session An optional session to use for the operation.
-         * @return A std::vector of documents.
-         */
+        /// @brief Finds all documents matching the query.
+        /// @param query The query filter.
+        /// @param options The find options (e.g., sort, limit, skip).
+        /// @param session An optional session to use for the operation.
+        /// @return A std::vector of documents.
         std::vector<T> find_many(const Query &query, const FindOptions &options = FindOptions{},
                                  std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
@@ -203,14 +196,12 @@ namespace QDB
             return results;
         }
 
-        /**
-         * @brief Updates a single document that matches the filter.
-         * @param filter_query A Query object defining which document to update.
-         * @param update_doc An Update object defining the update operations.
-         * @param options Options for the operation (e.g., upsert).
-         * @param session An optional session to use for the operation.
-         * @return The number of documents modified.
-         */
+        /// @brief Updates a single document that matches the filter.
+        /// @param filter_query A Query object defining which document to update.
+        /// @param update_doc An Update object defining the update operations.
+        /// @param options Options for the operation (e.g., upsert).
+        /// @param session An optional session to use for the operation.
+        /// @return The number of documents modified.
         int64_t update_one(const Query &filter_query, const Update &update_doc,
                            const UpdateOptions &options = UpdateOptions{},
                            std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
@@ -243,14 +234,12 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Updates all documents that match the filter.
-         * @param filter_query A Query object defining which documents to update.
-         * @param update_doc An Update object defining the update operations.
-         * @param options Options for the operation (e.g., upsert).
-         * @param session An optional session to use for the operation.
-         * @return The number of documents modified.
-         */
+        /// @brief Updates all documents that match the filter.
+        /// @param filter_query A Query object defining which documents to update.
+        /// @param update_doc An Update object defining the update operations.
+        /// @param options Options for the operation (e.g., upsert).
+        /// @param session An optional session to use for the operation.
+        /// @return The number of documents modified.
         int64_t update_many(const Query &filter_query, const Update &update_doc,
                             const UpdateOptions &options = UpdateOptions{},
                             std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
@@ -283,12 +272,10 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Deletes a single document that matches the filter.
-         * @param query The query filter.
-         * @param session An optional session to use for the operation.
-         * @return The number of documents deleted.
-         */
+        /// @brief Deletes a single document that matches the filter.
+        /// @param query The query filter.
+        /// @param session An optional session to use for the operation.
+        /// @return The number of documents deleted.
         int64_t delete_one(const Query &query,
                            std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
@@ -317,12 +304,10 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Deletes all documents that match the filter.
-         * @param query The query filter.
-         * @param session An optional session to use for the operation.
-         * @return The number of documents deleted.
-         */
+        /// @brief Deletes all documents that match the filter.
+        /// @param query The query filter.
+        /// @param session An optional session to use for the operation.
+        /// @return The number of documents deleted.
         int64_t delete_many(const Query &query,
                             std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
@@ -350,12 +335,10 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Counts the number of documents matching the filter.
-         * @param query The query filter.
-         * @param session An optional session to use for the operation.
-         * @return The number of matching documents.
-         */
+        /// @brief Counts the number of documents matching the filter.
+        /// @param query The query filter.
+        /// @param session An optional session to use for the operation.
+        /// @return The number of matching documents.
         int64_t count_documents(const Query &query = Query{},
                                 std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
         {
@@ -377,13 +360,11 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Executes an aggregation pipeline.
-         * @tparam ResultType The Document subclass to deserialize results into. Defaults to T.
-         * @param aggregation The Aggregation object defining the pipeline.
-         * @param session An optional session to use for the operation.
-         * @return A std::vector of ResultType documents.
-         */
+        /// @brief Executes an aggregation pipeline.
+        /// @tparam ResultType The Document subclass to deserialize results into. Defaults to T.
+        /// @param aggregation The Aggregation object defining the pipeline.
+        /// @param session An optional session to use for the operation.
+        /// @return A std::vector of ResultType documents.
         template <typename ResultType = T>
         std::vector<ResultType>
         aggregate(const Aggregation &aggregation,
@@ -423,15 +404,13 @@ namespace QDB
             return results;
         }
 
-        /**
-         * @brief Finds a single document and updates it in one atomic operation.
-         * @param query The selection criteria for the update.
-         * @param update The modifications to apply.
-         * @param options Options for the operation (e.g., sort, projection, upsert, return_document).
-         * @param session An optional session for transactional context.
-         * @return An std::optional containing the document (either before or after modification), or std::nullopt if no
-         * document was found.
-         */
+        /// @brief Finds a single document and updates it in one atomic operation.
+        /// @param query The selection criteria for the update.
+        /// @param update The modifications to apply.
+        /// @param options Options for the operation (e.g., sort, projection, upsert, return_document).
+        /// @param session An optional session for transactional context.
+        /// @return An std::optional containing the document (either before or after modification), or std::nullopt if no
+        /// document was found.
         std::optional<T>
         find_one_and_update(const Query &query, const Update &update,
                             const FindAndModifyOptions &options = FindAndModifyOptions{},
@@ -486,15 +465,13 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Finds a single document and replaces it in one atomic operation.
-         * @param query The selection criteria for the replacement.
-         * @param replacement The new document to replace the found one.
-         * @param options Options for the operation (e.g., sort, projection, upsert, return_document).
-         * @param session An optional session for transactional context.
-         * @return An std::optional containing the document (either before or after replacement), or std::nullopt if no
-         * document was found.
-         */
+        /// @brief Finds a single document and replaces it in one atomic operation.
+        /// @param query The selection criteria for the replacement.
+        /// @param replacement The new document to replace the found one.
+        /// @param options Options for the operation (e.g., sort, projection, upsert, return_document).
+        /// @param session An optional session for transactional context.
+        /// @return An std::optional containing the document (either before or after replacement), or std::nullopt if no
+        /// document was found.
         std::optional<T>
         find_one_and_replace(const Query &query, const T &replacement,
                              const FindAndModifyOptions &options = FindAndModifyOptions{},
@@ -549,13 +526,11 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Finds a single document and deletes it in one atomic operation.
-         * @param query The selection criteria for the deletion.
-         * @param options Options for the operation (e.g., sort, projection).
-         * @param session An optional session for transactional context.
-         * @return An std::optional containing the deleted document, or std::nullopt if no document was found.
-         */
+        /// @brief Finds a single document and deletes it in one atomic operation.
+        /// @param query The selection criteria for the deletion.
+        /// @param options Options for the operation (e.g., sort, projection).
+        /// @param session An optional session for transactional context.
+        /// @return An std::optional containing the deleted document, or std::nullopt if no document was found.
         std::optional<T>
         find_one_and_delete(const Query &query, const FindAndModifyOptions &options = FindAndModifyOptions{},
                             std::optional<std::reference_wrapper<mongocxx::client_session>> session = std::nullopt)
@@ -598,12 +573,10 @@ namespace QDB
 
         // --- Index Management ---
 
-        /**
-         * @brief Creates a single-field index.
-         * @param field The name of the field to index.
-         * @param ascending True for an ascending index (1), false for descending (-1).
-         * @return The name of the created index.
-         */
+        /// @brief Creates a single-field index.
+        /// @param field The name of the field to index.
+        /// @param ascending True for an ascending index (1), false for descending (-1).
+        /// @return The name of the created index.
         std::string create_index(const std::string &field, bool ascending = true)
         {
             try
@@ -623,11 +596,9 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Creates a compound index on multiple fields.
-         * @param fields A vector of pairs, where each pair contains the field name and a boolean for ascending order.
-         * @return The name of the created index.
-         */
+        /// @brief Creates a compound index on multiple fields.
+        /// @param fields A vector of pairs, where each pair contains the field name and a boolean for ascending order.
+        /// @return The name of the created index.
         std::string create_compound_index(const std::vector<std::pair<std::string, bool>> &fields)
         {
             if (fields.empty())
@@ -663,10 +634,8 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Drops a specific index by name.
-         * @param index_name The name of the index to drop.
-         */
+        /// @brief Drops a specific index by name.
+        /// @param index_name The name of the index to drop.
         void drop_index(const std::string &index_name)
         {
             try
@@ -679,10 +648,8 @@ namespace QDB
             }
         }
 
-        /**
-         * @brief Lists the names of all indexes on the collection.
-         * @return A vector of strings, where each string is an index name.
-         */
+        /// @brief Lists the names of all indexes on the collection.
+        /// @return A vector of strings, where each string is an index name.
         std::vector<std::string> list_indexes()
         {
             std::vector<std::string> index_names;
@@ -705,6 +672,9 @@ namespace QDB
         }
 
     private:
+        /// @brief Converts a map of FieldValues to a BSON document.
+        /// @param fields The map of fields to convert.
+        /// @return The BSON document value.
         bsoncxx::document::value to_bson_doc(const std::unordered_map<std::string, FieldValue> &fields) const
         {
             bsoncxx::builder::basic::document builder;
@@ -715,6 +685,9 @@ namespace QDB
             return builder.extract();
         }
 
+        /// @brief Converts a BSON document view to a document of type T.
+        /// @param view The BSON document view to convert.
+        /// @return The deserialized document object.
         T from_bson_doc(const bsoncxx::document::view &view) const
         {
             T doc;
@@ -735,10 +708,10 @@ namespace QDB
         }
 
     private:
-        // This unique_ptr owns the client connection, keeping it alive.
+        /// @brief This unique_ptr owns the client connection, keeping it alive.
         std::unique_ptr<mongocxx::pool::entry> _client_entry;
 
-        // The collection handle itself. It is dependent on the client from _client_entry.
+        /// @brief The collection handle itself. It is dependent on the client from _client_entry.
         mongocxx::collection _collection_handle;
     };
 } // namespace QDB
