@@ -4,10 +4,14 @@ This document outlines the public interface for the QuickDB C++ library. It is i
 
 The library is organized around a few key components:
 
--   **Database**: The main entry point for connecting to the database.
+-   **Database**: The main entry point for connecting to the database and managing transactions.
 -   **Document**: A base class for your data models.
--   **Collection**: Represents a MongoDB collection and provides methods for CRUD operations.
+-   **Collection**: Represents a MongoDB collection and provides methods for CRUD, aggregation, and index management.
 -   **Query**: A fluent interface for building database queries.
+-   **Update**: A fluent interface for building update operations.
+-   **Aggregation**: A fluent interface for building aggregation pipelines.
+-   **GridFSBucket**: A handler for storing and retrieving large files.
+-   **Options**: A set of classes for specifying options for database operations.
 -   **FieldValue**: A type-safe wrapper for BSON data types.
 -   **Exception**: A custom exception for handling library-specific errors.
 
@@ -15,25 +19,33 @@ The library is organized around a few key components:
 
 ## `QDB::Database`
 
-The `Database` class is the main entry point for interacting with the QuickDB library. It manages the connection to your MongoDB instance.
-
-**Use Case:** Create a `Database` object at the start of your application to establish a connection pool to MongoDB.
+The `Database` class is the main entry point. It manages the connection pool to your MongoDB instance. Create one `Database` object at the start of your application and share it.
 
 ### Public Functions
 
 -   **`Database(const std::string &uri)`**
-    -   **Description:** Constructs a `Database` object and initializes the connection pool to the MongoDB instance specified by the URI.
-    -   **Parameters:**
-        -   `uri`: A standard MongoDB connection string.
+    -   **Description:** Constructs a `Database` object using a standard MongoDB connection string.
+    -   **Parameters:** `uri` - A standard MongoDB connection string.
     -   **Example:** `QDB::Database db("mongodb://localhost:27017");`
 
--   **`template <typename T> Collection<T> get_collection(const std::string &db_name, const std::string &collection_name)`**
-    -   **Description:** Gets a type-safe handle to a collection. The template argument `T` must be a class that inherits from `QDB::Document`.
-    -   **Parameters:**
-        -   `db_name`: The name of the database.
-        -   `collection_name`: The name of the collection.
-    -   **Returns:** A `QDB::Collection<T>` object for interacting with the specified collection.
-    -   **Example:** `auto user_collection = db.get_collection<User>("my_app", "users");`
+-   **`Database(const std::string &user, const std::string &pass, ...)`**
+    -   **Description**: Constructs a `Database` object for an authenticated connection.
+    -   **Parameters**: `user`, `pass`, `host`, `port`, `auth_db`, `max_pool_size`.
+
+-   **`template <typename T> Collection<T> get_collection(...)`**
+    -   **Description**: Gets a type-safe handle to a collection. `T` must inherit from `QDB::Document`.
+    -   **Parameters**: `db_name`, `collection_name`.
+    -   **Returns**: A `QDB::Collection<T>` object.
+    -   **Example**: `auto users = db.get_collection<User>("my_app", "users")`;
+
+-   **`GridFSBucket get_gridfs_bucket(const std::string &db_name, ...)`**
+    -   **Description**: Gets a handle to a GridFS bucket for large file storage.
+    -   **Parameters**: `db_name`, `bucket_name` (optional, defaults to "fs").
+    -   **Returns**: A `QDB::GridFSBucket` object.
+
+-   **`void with_transaction(std::function<void(mongocxx::client_session &session)> callback)`**
+    -   **Description**: Executes a series of operations within an atomic transaction. It automatically handles starting, committing, and aborting the transaction.
+    -   **Use Case**: Ensure that multiple database operations either all succeed or all fail together.
 
 ### Thread Safety
 
@@ -43,160 +55,180 @@ The `QDB::Database` object is designed to be thread-safe. It manages a connectio
 
 ## `QDB::Document`
 
-The `Document` class is an abstract base class that you must inherit from to create your own data models. It defines the contract for serialization and deserialization of your objects to and from the database representation.
-
-**Use Case:** Define a class for each type of document you want to store in a collection. For example, a `User` class would inherit from `QDB::Document`.
+An abstract base class for your data models. It defines the contract for serialization and deserialization.
 
 ### Public Functions
 
 -   **`virtual std::unordered_map<std::string, FieldValue> to_fields() const = 0;`**
-    -   **Description:** A pure virtual function that you must implement. This function should convert the members of your class into a map of `FieldValue` objects.
-    -   **Returns:** An `std::unordered_map<std::string, FieldValue>` where keys are the field names in the database.
+    -   **Description:** A pure virtual function. Implement to convert your class members into a map of `FieldValue` objects for storage.
 
 -   **`virtual void from_fields(const std::unordered_map<std::string, FieldValue> &fields) = 0;`**
-    -   **Description:** A pure virtual function that you must implement. This function should populate the members of your class from a map of `FieldValue` objects retrieved from the database.
-    -   **Parameters:**
-        -   `fields`: A map of field names to `FieldValue` objects.
+    -   **Description:** A pure virtual function. Implement to populate your class members from a map of `FieldValue` objects retrieved from the database.
 
 -   **`std::string get_id_str() const`**
-    -   **Description:** A helper function to get the string representation of the document's `_id`.
-    -   **Returns:** The ObjectId as a string, or an empty string if the `_id` is not an ObjectId.
+    -   **Description:** Gets the string representation of the document's `_id`.
 
 -   **`FieldValue get_id() const`**
-    -   **Description:** Gets the `FieldValue` representing the document's `_id`.
-    -   **Returns:** A `FieldValue` object for the `_id`.
+    -   **Description:** Gets the raw `bsoncxx::oid` object for the document's `_id`.
 
 ### Protected Members
 
--   **`FieldValue _id`**
-    -   **Description:** This member stores the document's unique identifier (`_id`). It is automatically managed by the library (e.g., populated on insertion).
+-   **`bsoncxx::oid _id`**
+    -   **Description:** Stores the document's unique `_id`. It is automatically managed by the library.
 
 ---
 
 ## `QDB::Collection<T>`
 
-This class provides the interface for performing operations on a MongoDB collection. The template parameter `T` must be a class that inherits from `QDB::Document`.
+Provides the interface for performing operations on a collection. `T` must be a subclass of `QDB::Document`.
 
 **Use Case:** After getting a `Collection` object from the `Database`, use its methods to insert, find, update, and delete documents.
 
-### Public Functions
+### CRUD Operations
 
--   **`void insert_one(T &doc)`**
-    -   **Description:** Inserts a single document into the collection. The `_id` of the `doc` object is populated upon successful insertion.
-    -   **Parameters:**
-        -   `doc`: The document object to insert.
+-   ``int64_t create_one(T &doc, ...)``: Inserts a single document. Populates `doc._id`.
+-   `int64_t create_many(std::vector<T> &docs, ...)`: Inserts multiple documents. Populates `_id` for each doc.
+-   `std::optional<T> find_one(const Query &query, ...)`: Finds a single document matching the query.
+-   `std::vector<T> find_many(const Query &query, ...)`: Finds all documents matching the query.
+-   `int64_t update_one(const Query &filter, const Update &update, ...)`: Updates the first document matching the filter.
+-   `int64_t update_many(const Query &filter, const Update &update, ...)`: Updates all documents matching the filter.
+-   `int64_t delete_one(const Query &query, ...)`: Deletes the first document matching the query.
+-   `int64_t delete_many(const Query &query, ...)`: Deletes all documents matching the query.
+-   `int64_t count_documents(const Query &query, ...)`: Counts documents matching the query.
 
--   **`void insert_many(std::vector<T> &docs)`**
-    -   **Description:** Inserts multiple documents into the collection.
-    -   **Parameters:**
-        -   `docs`: A vector of document objects to insert.
+### Atomic Find-and-Modify Operations
+These methods perform an operation and return the affected document in a single atomic call.
 
--   **`std::optional<T> find_one(const Query &query)`**
-    -   **Description:** Finds a single document that matches the query.
-    -   **Parameters:**
-        -   `query`: A `QDB::Query` object specifying the filter.
-    -   **Returns:** An `std::optional<T>` containing the document if found, otherwise `std::nullopt`.
+-   `std::optional<T> find_one_and_update(const Query &query, const Update &update, ...)`
+-   `std::optional<T> find_one_and_replace(const Query &query, const T &replacement, ...)`
+-   `std::optional<T> find_one_and_delete(const Query &query, ...)`
 
--   **`std::vector<T> find(const Query &query)`**
-    -   **Description:** Finds all documents that match the query.
-    -   **Parameters:**
-        -   `query`: A `QDB::Query` object specifying the filter.
-    -   **Returns:** A `std::vector<T>` of the found documents.
+### Aggregation
 
--   **`int64_t replace_one(const Query &filter, const T &update)`**
-    -   **Description:** Replaces a single document that matches the filter with a new document.
-    -   **Parameters:**
-        -   `filter`: A `QDB::Query` object specifying which document to replace.
-        -   `update`: The new document object.
-    -   **Returns:** The number of documents modified.
+-   `template <typename ResultType = T> std::vector<ResultType> aggregate(...)`
+    -   **Description**: Executes an aggregation pipeline. `ResultType` must also be a `QDB::Document` subclass, allowing you to deserialize results into a different shape.
+    -   **Parameters**: `aggregation` - A `QDB::Aggregation` object.
 
--   **`int64_t delete_one(const Query &filter)`**
-    -   **Description:** Deletes a single document that matches the filter.
-    -   **Parameters:**
-        -   `filter`: A `QDB::Query` object specifying which document to delete.
-    -   **Returns:** The number of documents deleted.
+### Index Management
 
--   **`int64_t delete_many(const Query &filter)`**
-    -   **Description:** Deletes all documents that match the filter.
-    -   **Parameters:**
-        -   `filter`: A `QDB::Query` object specifying which documents to delete.
-    -   **Returns:** The number of documents deleted.
-
--   **`int64_t count_documents(const Query &filter)`**
-    -   **Description:** Counts the number of documents that match the filter.
-    -   **Parameters:**
-        -   `filter`: A `QDB::Query` object specifying the filter.
-    -   **Returns:** The number of matching documents.
+-   `std::string create_index(const std::string &field, ...)`: Creates a single-field index.
+-   `std::string create_compound_index(const std::vector<std::pair<std::string, bool>> &fields)`: Creates a compound index.
+-   `void drop_index(const std::string &index_name)`: Drops an index by its name.
+-   `std::vector<std::string> list_indexes()`: Lists the names of all indexes on the collection.
 
 ---
 
 ## `QDB::Query`
 
-The `Query` class provides a fluent interface for building filters for database operations.
+A fluent interface for building query filters.
 
-**Use Case:** Create and chain methods on a `Query` object to define the criteria for `find`, `delete`, and other collection methods.
+### Static Factory Methods
+
+-   `static Query by_id(const std::string &id_str)`: Creates a query to find a document by its `_id` string.
+-   `static Query Or(const std::initializer_list<Query> &queries)`: Creates a logical `$or` query.
+-   `static Query And(const std::initializer_list<Query> &queries)`: Creates a logical `$and` query.
+
+### Chaining Methods
+
+-   **Comparison**: `eq` (==), `ne` (!=), `gt` (>), `gte` (>=), `lt` (<), `lte` (<=)
+-   **Array**: `in`, `all` (matches arrays containing all specified elements)
+-   **Element**: `exists` (checks for the presence or absence of a field)
+-   **Evaluation**: `mod`, `regex`, `elemMatch` (queries for a matching element within an array)
+
+## `QDB::Update`
+
+A fluent interface for building update documents for `update_one`, `update_many`, and `find_one_and_update`.
+
+### Chaining Methods
+
+-   **Field**: `set`, `unset`, `rename`, `current_date`
+-   **Number**: `inc` (increment), `mul` (multiply), `min`, `max`
+-   **Array**: `push`, `push_each`, `pull`, `pull_each`, `pullAll`, `pop`, `add_to_set`
+-   **Bitwise**: `bit` (`and`, `or`, `xor`)
+
+### Example
+
+```cpp
+auto query = QDB::Query().eq("username", "jane.doe");
+auto update = QDB::Update()
+                  .set("status", "active")
+                  .inc("login_count", 1)
+                  .push("history", "Logged in at " + getCurrentTimestamp());
+
+user_collection.update_one(query, update);
+```
+
+## `QDB::Aggregation`
+
+A fluent interface for building aggregation pipelines. Used with `collection.aggregate()`.
+
+### Pipeline Stages
+
+-   `match(const Query &query)`: Filters documents.
+-   `project(const DocumentBuilder &project_doc)`: Reshapes documents.
+-   `group(const DocumentBuilder &group_doc)`: Groups documents and calculates aggregate values.
+-   `sort(const DocumentBuilder &sort_doc)`: Sorts documents.
+-   `limit(int64_t limit)`: Limits the number of documents.
+-   `skip(int64_t skip)`: Skips a number of documents.
+-   `unwind(const std::string &field)`: Deconstructs an array field.
+-   `lookup(...)`: Performs a left outer join to another collection.
+-   `count(const std::string &output_field)`: Counts documents and outputs to a new field.
+
+### Example
+
+```cpp
+// Calculate the total order value per customer
+auto pipeline = QDB::Aggregation()
+    .match(QDB::Query().eq("status", "completed"))
+    .group(QDB::DocumentBuilder("_id", "$customer_id")
+           .add_field("totalValue", QDB::DocumentBuilder("$sum", "$order_total")))
+    .sort(QDB::DocumentBuilder("totalValue", -1));
+
+auto results = order_collection.aggregate<CustomerTotal>(pipeline);
+```
+
+## `QDB::GridFSBucket`
+
+Handles storage and retrieval of large files in MongoDB.
 
 ### Public Functions
 
--   **`static Query by_id(const std::string &id_str)`**
-    -   **Description:** A static factory method to create a query that filters by a document's `_id`.
-    -   **Parameters:**
-        -   `id_str`: The string representation of the ObjectId.
-    -   **Returns:** A `Query` object.
+-   `bsoncxx::oid upload_from_file(const std::string &filename, const std::string &source_path)`
+    -   **Description**: Uploads a local file to GridFS.
+    -   **Returns**: The `ObjectId` of the created file.
+-   `void download_to_file(bsoncxx::oid file_id, const std::string &destination_path)`
+    -   **Description**: Downloads a file from GridFS to the local filesystem.
+-   `void delete_file(bsoncxx::oid file_id)`
+    -   **Description**: Deletes a file and its chunks from GridFS.
 
--   **`Query &eq(const std::string &field, const T &value)`**
-    -   **Description:** Adds an equality condition (`==`).
--   **`Query &ne(const std::string &field, const T &value)`**
-    -   **Description:** Adds a "not equal" condition (`!=`).
--   **`Query &gt(const std::string &field, const T &value)`**
-    -   **Description:** Adds a "greater than" condition (`>`).
--   **`Query &gte(const std::string &field, const T &value)`**
-    -   **Description:** Adds a "greater than or equal" condition (`>=`).
--   **`Query &lt(const std::string &field, const T &value)`**
-    -   **Description:** Adds a "less than" condition (`<`).
--   **`Query &lte(const std::string &field, const T &value)`**
-    -   **Description:** Adds a "less than or equal" condition (`<=`).
--   **`Query &in(const std::string &field, const std::vector<T> &values)`**
-    -   **Description:** Adds an "in" condition (field value must be in the given vector).
+## `QDB::Options`
+These classes are passed to `Collection` methods to modify their behavior.
 
-**Example:**
-```cpp
-// Find a user by email
-auto query = QDB::Query().eq("email", "test@example.com");
-auto user = user_collection.find_one(query);
+### QDB::FindOptions
 
-// Find users older than 25
-auto age_query = QDB::Query().gt("age", 25);
-auto older_users = user_collection.find(age_query);
-```
+-   For `find_one` and `find_many`.
+    -   `sort(key, direction)`: Specifies the sort order.
+    -   `limit(count)`: Sets the maximum number of documents to return.
+    -   `skip(count)`: Skips a number of documents.
+    -   `projection(doc)`: Specifies which fields to include or exclude.
 
-### Advanced Query Examples
+### QDB::UpdateOptions
 
-**Querying Nested Documents:**
+-   For `update_one` and `update_many`.
+    -   `upsert(bool)`: If true, creates a new document if no match is found.
 
-To query based on a field within a nested document, use dot notation in the field name.
+### QDB::FindAndModifyOptions
 
-```cpp
-// Assuming a document structure like: { address: { city: "New York" } }
-auto new_york_query = QDB::Query().eq("address.city", "New York");
-```
-
-**Querying Elements in an Array:**
-
-To find documents where an array contains a specific value:
-
-```cpp
-// Assuming a document structure like: { tags: ["c++", "mongodb"] }
-auto tag_query = QDB::Query().eq("tags", "mongodb");
-```
+-   For `find_one_and_update`, `find_one_and_replace`, and `find_one_and_delete`.
+    -   Inherits `sort()` and `projection()` from `FindOptions`.
+    -   `upsert(bool)`: Same as `UpdateOptions`.
+    -   `return_document(ReturnDocument)`: Specifies whether to return the document from before (`kBefore`) or after (`kAfter`) the modification.
 
 ---
 
 ## `QDB::FieldValue` and `QDB::FieldType`
 
 The `FieldValue` struct is a wrapper for the various data types that can be stored in MongoDB. It provides a type-safe way to handle BSON data. The `FieldType` enum represents the underlying BSON data type.
-
-**Use Case:** You will interact with `FieldValue` primarily when implementing the `to_fields` and `from_fields` methods in your `Document` subclasses.
 
 ### `FieldValue` Public Members
 
