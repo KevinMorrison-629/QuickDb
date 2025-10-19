@@ -76,6 +76,10 @@ namespace QDB
         /// @return A GridFSBucket object for file operations.
         GridFSBucket get_gridfs_bucket(const std::string &db_name, const std::string &bucket_name = "fs");
 
+        /// @brief Pings the database to verify the connection.
+        /// @throws QDB::Exception if the ping command fails.
+        void ping();
+
     private:
         /// @brief Gets the singleton mongocxx::instance.
         /// @return A reference to the mongocxx::instance.

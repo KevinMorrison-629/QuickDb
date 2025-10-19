@@ -103,4 +103,19 @@ namespace QDB
         }
     }
 
+    void Database::ping()
+    {
+        try
+        {
+            auto client = m_pool->acquire();
+            // The ismaster command is a lightweight way to check server status.
+            (*client)["admin"].run_command(
+                bsoncxx::builder::basic::make_document(bsoncxx::builder::basic::kvp("ismaster", 1)));
+        }
+        catch (const std::exception &e)
+        {
+            throw QDB::Exception("Database ping failed: " + std::string(e.what()));
+        }
+    }
+
 } // namespace QDB

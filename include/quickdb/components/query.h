@@ -231,8 +231,20 @@ namespace QDB
         /// @param fv The field value.
         void add_operator_condition(const std::string &field, const std::string &op, const FieldValue &fv)
         {
-            std::unordered_map<std::string, FieldValue> condition_map = {{op, fv}};
-            _query_map[field] = FieldValue(condition_map);
+            // [FIX] This logic now correctly merges operator conditions instead of overwriting them.
+            auto it = _query_map.find(field);
+            if (it != _query_map.end() && it->second.type == FieldType::FT_OBJECT)
+            {
+                // If the field already has an operator, add the new one to the existing sub-document.
+                auto &map = std::get<std::unordered_map<std::string, FieldValue>>(it->second.value);
+                map[op] = fv;
+            }
+            else
+            {
+                // Otherwise, create a new sub-document for the operator.
+                std::unordered_map<std::string, FieldValue> condition_map = {{op, fv}};
+                _query_map[field] = FieldValue(condition_map);
+            }
         }
 
         /// @brief The internal map holding the query conditions.
