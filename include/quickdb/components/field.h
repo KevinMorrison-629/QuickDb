@@ -50,7 +50,13 @@ namespace QDB
 
     /// @brief Metafunction to map C++ types to FieldType enum values.
     /// @tparam T The C++ type to map.
-    template <typename T> struct type_to_fieldtype;
+    template <typename T, typename = void> struct type_to_fieldtype; // General template
+
+    /// @brief SFINAE specialization for enum types. All enums map to FT_INT_32.
+    template <typename T> struct type_to_fieldtype<T, std::enable_if_t<std::is_enum_v<T>>>
+    {
+        static constexpr FieldType value = FieldType::FT_INT_32;
+    };
 
     /// @brief Specialization of type_to_fieldtype for bool.
     template <> struct type_to_fieldtype<bool>
@@ -163,7 +169,20 @@ namespace QDB
         /// @tparam T The type of the value.
         /// @param val The value to store.
         template <typename T, typename = std::enable_if_t<!std::is_same_v<std::decay_t<T>, FieldValue>>>
-        FieldValue(const T &val) : type(type_to_fieldtype<std::decay_t<T>>::value), value(val){};
+        FieldValue(const T &val)
+        {
+            using DecayedT = std::decay_t<T>;
+            type = type_to_fieldtype<DecayedT>::value;
+
+            if constexpr (std::is_enum_v<DecayedT>)
+            {
+                value = static_cast<int32_t>(val);
+            }
+            else
+            {
+                value = val;
+            }
+        }
 
         /// @brief Constructs a FieldValue from a std::chrono::system_clock::time_point, converting it to a b_date.
         /// @param tp The time point to store.
@@ -226,6 +245,27 @@ namespace QDB
                 T doc;
                 doc.from_fields(map);
                 return doc;
+            }
+            // [ADDED] This block handles deserialization for enum types.
+            else if constexpr (std::is_enum_v<T>)
+            {
+                // Enums are stored as integers, so we retrieve the integer
+                // and static_cast it back to the enum type.
+                if (type != FieldType::FT_INT_32)
+                    return T{}; // Return default value if type mismatch
+                try
+                {
+                    if (std::holds_alternative<int32_t>(value))
+                    {
+                        return static_cast<T>(std::get<int32_t>(value));
+                    }
+                }
+                catch (const std::bad_variant_access &)
+                {
+                    // This catch handles cases where the type in the variant
+                    // does not match what we are trying to get.
+                }
+                return T{}; // Return default-constructed enum value on failure
             }
             else if constexpr (std::is_same_v<T, std::chrono::system_clock::time_point>)
             {
@@ -342,7 +382,7 @@ namespace QDB
             arr.append(std::get<bsoncxx::types::b_timestamp>(fv.value));
             break;
         }
-        case FieldType::FT_OBJECT: // [NEW] Handles nested objects in an array
+        case FieldType::FT_OBJECT:
         {
             document sub_doc{};
             auto map = std::get<std::unordered_map<std::string, FieldValue>>(fv.value);
@@ -353,7 +393,7 @@ namespace QDB
             arr.append(sub_doc.view());
             break;
         }
-        case FieldType::FT_ARRAY: // [NEW] Handles nested arrays
+        case FieldType::FT_ARRAY:
         {
             array sub_arr{};
             auto vec = std::get<std::vector<FieldValue>>(fv.value);
@@ -426,7 +466,7 @@ namespace QDB
             doc.append(kvp(key, std::get<bsoncxx::types::b_timestamp>(fv.value)));
             break;
         }
-        case FieldType::FT_OBJECT: // [NEW] Handles nested objects
+        case FieldType::FT_OBJECT:
         {
             document sub_doc{};
             auto map = std::get<std::unordered_map<std::string, FieldValue>>(fv.value);
@@ -437,7 +477,7 @@ namespace QDB
             doc.append(kvp(key, sub_doc.view()));
             break;
         }
-        case FieldType::FT_ARRAY: // [NEW] Handles arrays
+        case FieldType::FT_ARRAY:
         {
             array sub_arr{};
             auto vec = std::get<std::vector<FieldValue>>(fv.value);
@@ -497,7 +537,7 @@ namespace QDB
             fv.type = FieldType::FT_TIMESTAMP;
             fv.value = element.get_timestamp();
             break;
-        case bsoncxx::type::k_document: // [NEW] Handles nested documents
+        case bsoncxx::type::k_document:
         {
             fv.type = FieldType::FT_OBJECT;
             std::unordered_map<std::string, FieldValue> map;
