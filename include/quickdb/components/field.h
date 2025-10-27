@@ -2,6 +2,7 @@
 
 #include <chrono> // Required for std::chrono::system_clock::time_point
 #include <cstdint>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -15,6 +16,8 @@
 #include <bsoncxx/json.hpp>
 #include <bsoncxx/oid.hpp>
 #include <bsoncxx/types.hpp>
+
+#include "nlohmann/json.hpp"
 
 namespace QDB
 {
@@ -565,6 +568,84 @@ namespace QDB
             break;
         }
         return fv;
+    }
+
+    /// @brief Overload for converting a time_point directly to a JSON string.
+    ///
+    /// This function serves as a non-recursive helper. It contains the shared
+    /// formatting logic for dates and times, eliminating duplication.
+    /// @param tp The time_point to format.
+    /// @return A nlohmann::json object containing the formatted date string.
+    inline nlohmann::json FieldValueToJson(const std::chrono::system_clock::time_point &tp)
+    {
+        const auto tt = std::chrono::system_clock::to_time_t(tp);
+        std::tm tm_buf{};
+#ifdef _WIN32
+        gmtime_s(&tm_buf, &tt);
+#else
+        gmtime_r(&tt, &tm_buf);
+#endif
+        std::stringstream ss;
+        ss << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%SZ");
+        return ss.str();
+    }
+
+    /// @brief Converts a QDB::FieldValue variant into a nlohmann::json object.
+    ///
+    /// This function is the bridge between the database-layer FieldValue and the
+    /// API-layer JSON representation. It uses std::visit to handle each possible
+    /// type stored in the variant.
+    /// @param field_value The FieldValue to convert.
+    /// @return A nlohmann::json object representing the value.
+    inline nlohmann::json FieldValueToJson(const FieldValue &field_value)
+    {
+        return std::visit(
+            [](const auto &value) -> nlohmann::json
+            {
+                using T = std::decay_t<decltype(value)>;
+
+                // Case 1: Vector of FieldValues (BSON array)
+                if constexpr (std::is_same_v<T, std::vector<FieldValue>>)
+                {
+                    nlohmann::json arr = nlohmann::json::array();
+                    for (const auto &element : value)
+                    {
+                        arr.push_back(FieldValueToJson(element)); // Recursive call
+                    }
+                    return arr;
+                }
+                // Case 2: Map of FieldValues (BSON document)
+                else if constexpr (std::is_same_v<T, std::unordered_map<std::string, FieldValue>>)
+                {
+                    nlohmann::json obj = nlohmann::json::object();
+                    for (const auto &[key, val] : value)
+                    {
+                        obj[key] = FieldValueToJson(val); // Recursive call
+                    }
+                    return obj;
+                }
+                // Case 3: bsoncxx::oid
+                else if constexpr (std::is_same_v<T, bsoncxx::oid>)
+                {
+                    return nlohmann::json(value.to_string());
+                }
+                // Case 4: b_date (SIMPLIFIED)
+                else if constexpr (std::is_same_v<T, bsoncxx::types::b_date>)
+                {
+                    return FieldValueToJson(std::chrono::system_clock::time_point(value));
+                }
+                // Case 5: b_timestamp
+                else if constexpr (std::is_same_v<T, bsoncxx::types::b_timestamp>)
+                {
+                    return nlohmann::json{{"timestamp", value.timestamp}, {"increment", value.increment}};
+                }
+                // Case 6: All other primitive types
+                else
+                {
+                    return nlohmann::json(value);
+                }
+            },
+            field_value.value); // Visit the inner .value variant
     }
 
 } // namespace QDB

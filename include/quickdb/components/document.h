@@ -36,6 +36,34 @@ namespace QDB
         /// @return The bsoncxx::oid object for this document.
         bsoncxx::oid get_id() const { return _id; }
 
+        /**
+         * @brief A generic to_json function for any class that inherits from QDB::Document.
+         *
+         * This allows for automatic JSON serialization of any of your data models
+         * by simply reusing the existing `to_fields` method.
+         */
+
+        /// @brief A generic to_json function for any class that inherits from QDB::Document.
+        ///
+        /// This allows for automatic JSON serialization of any field types
+        /// @return JSON object representing the document data
+        nlohmann::json to_json() const
+        {
+            nlohmann::json j = nlohmann::json::object();
+            // The _id is stored separately in the base class, so we add it first.
+            j["_id"] = get_id_str();
+
+            // Get all other fields from the document's existing to_fields method.
+            auto fields = to_fields();
+            for (const auto &pair : fields)
+            {
+                // Use our new helper from field.h to convert each FieldValue to a json value.
+                j[pair.first] = QDB::FieldValueToJson(pair.second);
+            }
+
+            return j;
+        };
+
         // The Collection<T> class will be a friend to access the protected _id member.
         template <typename T> friend class Collection;
 
@@ -157,4 +185,5 @@ namespace QDB
         }
         std::cout << "}\n" << std::endl;
     }
+
 } // namespace QDB
