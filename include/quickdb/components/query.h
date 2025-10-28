@@ -50,10 +50,40 @@ namespace QDB
             return q;
         }
 
+        /// @brief Creates a logical OR query from a list of queries.
+        /// @param queries A vector of Query objects.
+        /// @return A new Query object representing the $or condition.
+        static Query Or(const std::vector<Query> &queries)
+        {
+            Query q;
+            std::vector<FieldValue> query_docs;
+            for (const auto &query : queries)
+            {
+                query_docs.emplace_back(query.get_fields());
+            }
+            q._query_map["$or"] = FieldValue(query_docs);
+            return q;
+        }
+
         /// @brief Creates a logical AND query from a list of queries.
         /// @param queries An initializer list of Query objects.
         /// @return A new Query object representing the $and condition.
         static Query And(const std::initializer_list<Query> &queries)
+        {
+            Query q;
+            std::vector<FieldValue> query_docs;
+            for (const auto &query : queries)
+            {
+                query_docs.emplace_back(query.get_fields());
+            }
+            q._query_map["$and"] = FieldValue(query_docs);
+            return q;
+        }
+
+        /// @brief Creates a logical AND query from a list of queries.
+        /// @param queries A vector of Query objects.
+        /// @return A new Query object representing the $and condition.
+        static Query And(const std::vector<Query> &queries)
         {
             Query q;
             std::vector<FieldValue> query_docs;
