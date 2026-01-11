@@ -245,6 +245,18 @@ namespace QDB
             return *this;
         }
 
+        /// @brief Adds a text search condition ($text).
+        /// @param search_term The string to search for.
+        /// @return A reference to the current Query object for chaining.
+        Query &text(const std::string &search_term)
+        {
+            // BSON format for text search: { $text: { $search: "term" } }
+            std::unordered_map<std::string, FieldValue> text_search_map;
+            text_search_map["$search"] = FieldValue(search_term);
+            _query_map["$text"] = FieldValue(text_search_map);
+            return *this;
+        }
+
         /// @brief Gets the underlying field map representing the query.
         /// @return A constant reference to the query's field map.
         const std::unordered_map<std::string, FieldValue> &get_fields() const { return _query_map; }

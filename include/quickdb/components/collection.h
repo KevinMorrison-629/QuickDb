@@ -584,9 +584,9 @@ namespace QDB
                 bsoncxx::builder::basic::document keys;
                 keys.append(bsoncxx::builder::basic::kvp(field, ascending ? 1 : -1));
                 auto result = _collection_handle.indexes().create_one(keys.view());
-                if (auto ele = result["name"]; ele && ele.type() == bsoncxx::type::k_string)
+                if (result)
                 {
-                    return std::string(ele.get_string().value);
+                    return *result;
                 }
                 return field + (ascending ? "_1" : "_-1");
             }
@@ -613,9 +613,9 @@ namespace QDB
                     keys.append(bsoncxx::builder::basic::kvp(field_pair.first, field_pair.second ? 1 : -1));
                 }
                 auto result = _collection_handle.indexes().create_one(keys.view());
-                if (auto ele = result["name"]; ele && ele.type() == bsoncxx::type::k_string)
+                if (result)
                 {
-                    return std::string(ele.get_string().value);
+                    return *result;
                 }
                 std::string generated_name;
                 for (const auto &field_pair : fields)
@@ -631,6 +631,35 @@ namespace QDB
             catch (const std::exception &e)
             {
                 throw QDB::Exception("Failed to create compound index: " + std::string(e.what()));
+            }
+        }
+
+        /// @brief Creates a text index on specified fields.
+        /// @param fields A vector of field names to include in the text index.
+        /// @return The name of the created index.
+        std::string create_text_index(const std::vector<std::string> &fields)
+        {
+            if (fields.empty())
+            {
+                throw QDB::Exception("Cannot create a text index with no fields.");
+            }
+            try
+            {
+                bsoncxx::builder::basic::document keys;
+                for (const auto &field : fields)
+                {
+                    keys.append(bsoncxx::builder::basic::kvp(field, "text"));
+                }
+                auto result = _collection_handle.indexes().create_one(keys.view());
+                if (result)
+                {
+                    return *result;
+                }
+                return "text_index";
+            }
+            catch (const std::exception &e)
+            {
+                throw QDB::Exception("Failed to create text index: " + std::string(e.what()));
             }
         }
 
