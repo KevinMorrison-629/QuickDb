@@ -9,7 +9,7 @@
 #include "quickdb/components/update.h"
 
 // Standard library includes
-#include <functional> // For std::reference_wrapper
+#include <functional>
 #include <iostream>
 #include <optional>
 #include <type_traits>
@@ -25,6 +25,7 @@
 #include <mongocxx/options/find_one_and_delete.hpp>
 #include <mongocxx/options/find_one_and_replace.hpp>
 #include <mongocxx/options/find_one_and_update.hpp>
+#include <mongocxx/options/index.hpp>
 #include <mongocxx/pool.hpp>
 #include <mongocxx/result/delete.hpp>
 #include <mongocxx/result/insert_many.hpp>
@@ -575,15 +576,23 @@ namespace QDB
 
         /// @brief Creates a single-field index.
         /// @param field The name of the field to index.
-        /// @param ascending True for an ascending index (1), false for descending (-1).
+        /// @param ascending True for ascending, false for descending.
+        /// @param unique True to enforce unique constraint.
         /// @return The name of the created index.
-        std::string create_index(const std::string &field, bool ascending = true)
+        std::string create_index(const std::string &field, bool ascending = true, bool unique = false)
         {
             try
             {
                 bsoncxx::builder::basic::document keys;
                 keys.append(bsoncxx::builder::basic::kvp(field, ascending ? 1 : -1));
-                auto result = _collection_handle.indexes().create_one(keys.view());
+
+                mongocxx::options::index index_opts{};
+                if (unique)
+                {
+                    index_opts.unique(true);
+                }
+
+                auto result = _collection_handle.indexes().create_one(keys.view(), index_opts);
                 if (result)
                 {
                     return *result;
