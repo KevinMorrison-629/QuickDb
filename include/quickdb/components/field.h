@@ -64,67 +64,71 @@ namespace QDB
     /// @brief Specialization of type_to_fieldtype for bool.
     template <> struct type_to_fieldtype<bool>
     {
-        static constexpr FieldType value = FieldType::FT_BOOLEAN; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_BOOLEAN;
     };
     /// @brief Specialization of type_to_fieldtype for int32_t.
     template <> struct type_to_fieldtype<int32_t>
     {
-        static constexpr FieldType value = FieldType::FT_INT_32; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_INT_32;
     };
     /// @brief Specialization of type_to_fieldtype for int64_t.
     template <> struct type_to_fieldtype<int64_t>
     {
-        static constexpr FieldType value = FieldType::FT_INT_64; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_INT_64;
     };
     /// @brief Specialization of type_to_fieldtype for double.
     template <> struct type_to_fieldtype<double>
     {
-        static constexpr FieldType value = FieldType::FT_DOUBLE; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_DOUBLE;
     };
     /// @brief Specialization of type_to_fieldtype for bsoncxx::oid.
     template <> struct type_to_fieldtype<bsoncxx::oid>
     {
-        static constexpr FieldType value = FieldType::FT_OBJECT_ID; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_OBJECT_ID;
     };
     /// @brief Specialization of type_to_fieldtype for std::string.
     template <> struct type_to_fieldtype<std::string>
     {
-        static constexpr FieldType value = FieldType::FT_STRING; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_STRING;
     };
     /// @brief Specialization of type_to_fieldtype for const char*.
     template <> struct type_to_fieldtype<const char *>
     {
-        static constexpr FieldType value = FieldType::FT_STRING; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_STRING;
     };
     /// @brief Specialization of type_to_fieldtype for char*.
     template <> struct type_to_fieldtype<char *>
     {
-        static constexpr FieldType value = FieldType::FT_STRING; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_STRING;
     };
     /// @brief Specialization of type_to_fieldtype for bsoncxx::types::b_timestamp.
     template <> struct type_to_fieldtype<bsoncxx::types::b_timestamp>
     {
-        static constexpr FieldType value = FieldType::FT_TIMESTAMP; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_TIMESTAMP;
     };
     /// @brief Specialization of type_to_fieldtype for bsoncxx::types::b_date.
     template <> struct type_to_fieldtype<bsoncxx::types::b_date>
     {
-        static constexpr FieldType value = FieldType::FT_DATE; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_DATE;
     };
     /// @brief Specialization of type_to_fieldtype for std::chrono::system_clock::time_point.
     template <> struct type_to_fieldtype<std::chrono::system_clock::time_point>
     {
-        static constexpr FieldType value = FieldType::FT_DATE; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_DATE;
     };
     /// @brief Specialization of type_to_fieldtype for std::vector<FieldValue>.
     template <> struct type_to_fieldtype<std::vector<FieldValue>>
     {
-        static constexpr FieldType value = FieldType::FT_ARRAY; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_ARRAY;
     };
     /// @brief Specialization of type_to_fieldtype for std::unordered_map<std::string, FieldValue>.
     template <> struct type_to_fieldtype<std::unordered_map<std::string, FieldValue>>
     {
-        static constexpr FieldType value = FieldType::FT_OBJECT; ///< Corresponding FieldType.
+        static constexpr FieldType value = FieldType::FT_OBJECT;
+    };
+    template <> struct type_to_fieldtype<std::vector<uint8_t>>
+    {
+        static constexpr FieldType value = FieldType::FT_BINARY;
     };
 
     /// @brief A std::variant type alias representing the possible C++ types a field can hold.
@@ -194,6 +198,8 @@ namespace QDB
         {
         }
 
+        FieldValue(const std::vector<uint8_t> &vec) : type(FieldType::FT_BINARY), value(vec) {}
+
         /// @brief Template constructor to automatically handle std::vector<T>.
         /// @tparam T The inner type of the vector.
         /// @param vec The vector of values.
@@ -205,12 +211,10 @@ namespace QDB
             {
                 if constexpr (std::is_base_of_v<Document, T>)
                 {
-                    // For documents, we must serialize them to their field map.
                     fv_vector.emplace_back(FieldType::FT_OBJECT, item.to_fields());
                 }
                 else
                 {
-                    // For primitives and other vectors, the regular constructor works.
                     fv_vector.emplace_back(item);
                 }
             }
@@ -225,6 +229,20 @@ namespace QDB
             if constexpr (std::is_same_v<T, FieldValue>)
             {
                 return *this;
+            }
+            // NEW: Handle binary vector extraction specifically
+            else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
+            {
+                if (type != FieldType::FT_BINARY)
+                    return T{};
+                try
+                {
+                    return std::get<std::vector<uint8_t>>(value);
+                }
+                catch (...)
+                {
+                    return T{};
+                }
             }
             else if constexpr (is_std_vector<T>::value)
             {
@@ -249,13 +267,12 @@ namespace QDB
                 doc.from_fields(map);
                 return doc;
             }
-            // [ADDED] This block handles deserialization for enum types.
             else if constexpr (std::is_enum_v<T>)
             {
                 // Enums are stored as integers, so we retrieve the integer
                 // and static_cast it back to the enum type.
                 if (type != FieldType::FT_INT_32)
-                    return T{}; // Return default value if type mismatch
+                    return T{};
                 try
                 {
                     if (std::holds_alternative<int32_t>(value))
@@ -263,30 +280,26 @@ namespace QDB
                         return static_cast<T>(std::get<int32_t>(value));
                     }
                 }
-                catch (const std::bad_variant_access &)
+                catch (...)
                 {
-                    // This catch handles cases where the type in the variant
-                    // does not match what we are trying to get.
                 }
-                return T{}; // Return default-constructed enum value on failure
+                return T{};
             }
             else if constexpr (std::is_same_v<T, std::chrono::system_clock::time_point>)
             {
                 if (type != FieldType::FT_DATE)
-                    return T{}; // Return default constructed time_point
+                    return T{};
                 try
                 {
                     if (std::holds_alternative<bsoncxx::types::b_date>(value))
                     {
-                        // bsoncxx::types::b_date has an operator to convert to time_point
                         return std::get<bsoncxx::types::b_date>(value);
                     }
                 }
-                catch (const std::bad_variant_access &)
+                catch (...)
                 {
-                    // Should not happen if type is FT_DATE, but for safety.
                 }
-                return T{}; // Return default constructed time_point
+                return T{};
             }
             else
             {
@@ -295,7 +308,7 @@ namespace QDB
                     if (std::holds_alternative<T>(value))
                         return std::get<T>(value);
                 }
-                catch (const std::bad_variant_access &)
+                catch (...)
                 {
                 }
                 return T{};
@@ -341,57 +354,47 @@ namespace QDB
         switch (fv.type)
         {
         case FieldType::FT_BOOLEAN:
-        {
             arr.append(std::get<bool>(fv.value));
             break;
-        }
         case FieldType::FT_INT_32:
-        {
             arr.append(std::get<int32_t>(fv.value));
             break;
-        }
         case FieldType::FT_INT_64:
-        {
             arr.append(std::get<int64_t>(fv.value));
             break;
-        }
         case FieldType::FT_DOUBLE:
-        {
             arr.append(std::get<double>(fv.value));
             break;
-        }
         case FieldType::FT_NULL:
-        {
             arr.append(bsoncxx::types::b_null{});
             break;
-        }
         case FieldType::FT_STRING:
-        {
             arr.append(std::get<std::string>(fv.value));
             break;
-        }
         case FieldType::FT_OBJECT_ID:
-        {
             arr.append(std::get<bsoncxx::oid>(fv.value));
             break;
-        }
         case FieldType::FT_DATE:
-        {
             arr.append(std::get<bsoncxx::types::b_date>(fv.value));
             break;
-        }
         case FieldType::FT_TIMESTAMP:
-        {
             arr.append(std::get<bsoncxx::types::b_timestamp>(fv.value));
             break;
+        case FieldType::FT_BINARY:
+        {
+            const auto &vec = std::get<std::vector<uint8_t>>(fv.value);
+            arr.append(
+                bsoncxx::types::b_binary{bsoncxx::binary_sub_type::k_binary, static_cast<uint32_t>(vec.size()), vec.data()});
+            break;
         }
+
         case FieldType::FT_OBJECT:
         {
             document sub_doc{};
             auto map = std::get<std::unordered_map<std::string, FieldValue>>(fv.value);
             for (const auto &[sub_key, sub_value] : map)
             {
-                AppendToDocument(sub_doc, sub_key, sub_value); // Recursive call
+                AppendToDocument(sub_doc, sub_key, sub_value);
             }
             arr.append(sub_doc.view());
             break;
@@ -402,13 +405,12 @@ namespace QDB
             auto vec = std::get<std::vector<FieldValue>>(fv.value);
             for (const auto &item : vec)
             {
-                AppendToArray(sub_arr, item); // Recursive call
+                AppendToArray(sub_arr, item);
             }
             arr.append(sub_arr.view());
             break;
         }
         default:
-            // Other types not handled, append null
             arr.append(bsoncxx::types::b_null{});
             break;
         }
@@ -469,13 +471,21 @@ namespace QDB
             doc.append(kvp(key, std::get<bsoncxx::types::b_timestamp>(fv.value)));
             break;
         }
+        case FieldType::FT_BINARY:
+        {
+            const auto &vec = std::get<std::vector<uint8_t>>(fv.value);
+            doc.append(kvp(key, bsoncxx::types::b_binary{bsoncxx::binary_sub_type::k_binary,
+                                                         static_cast<uint32_t>(vec.size()), vec.data()}));
+            break;
+        }
+
         case FieldType::FT_OBJECT:
         {
             document sub_doc{};
             auto map = std::get<std::unordered_map<std::string, FieldValue>>(fv.value);
             for (const auto &[sub_key, sub_value] : map)
             {
-                AppendToDocument(sub_doc, sub_key, sub_value); // Recursive call
+                AppendToDocument(sub_doc, sub_key, sub_value);
             }
             doc.append(kvp(key, sub_doc.view()));
             break;
@@ -486,13 +496,13 @@ namespace QDB
             auto vec = std::get<std::vector<FieldValue>>(fv.value);
             for (const auto &item : vec)
             {
-                AppendToArray(sub_arr, item); // Call array helper
+                AppendToArray(sub_arr, item);
             }
             doc.append(kvp(key, sub_arr.view()));
             break;
         }
         default:
-        { // Other types not handled, append null
+        {
             doc.append(kvp(key, bsoncxx::types::b_null{}));
             break;
         }
@@ -540,13 +550,22 @@ namespace QDB
             fv.type = FieldType::FT_TIMESTAMP;
             fv.value = element.get_timestamp();
             break;
+        case bsoncxx::type::k_binary:
+        {
+            fv.type = FieldType::FT_BINARY;
+            auto bin = element.get_binary();
+            const uint8_t *ptr = bin.bytes;
+            fv.value = std::vector<uint8_t>(ptr, ptr + bin.size);
+            break;
+        }
+
         case bsoncxx::type::k_document:
         {
             fv.type = FieldType::FT_OBJECT;
             std::unordered_map<std::string, FieldValue> map;
             for (auto inner_element : element.get_document().value)
             {
-                map[static_cast<std::string>(inner_element.key())] = fromBsonElement(inner_element); // Recursive call
+                map[static_cast<std::string>(inner_element.key())] = fromBsonElement(inner_element);
             }
             fv.value = map;
             break;
@@ -557,7 +576,7 @@ namespace QDB
             std::vector<FieldValue> vec;
             for (auto inner_element : element.get_array().value)
             {
-                vec.push_back(fromBsonElement(inner_element)); // Recursive call
+                vec.push_back(fromBsonElement(inner_element));
             }
             fv.value = vec;
             break;
@@ -590,6 +609,54 @@ namespace QDB
         return ss.str();
     }
 
+    inline std::string Base64Encode(const std::vector<uint8_t> &data)
+    {
+        static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                                "abcdefghijklmnopqrstuvwxyz"
+                                                "0123456789+/";
+
+        std::string ret;
+        int i = 0;
+        int j = 0;
+        unsigned char char_array_3[3];
+        unsigned char char_array_4[4];
+
+        for (uint8_t byte : data)
+        {
+            char_array_3[i++] = byte;
+            if (i == 3)
+            {
+                char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
+                char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
+                char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
+                char_array_4[3] = char_array_3[2] & 0x3f;
+
+                for (i = 0; i < 4; i++)
+                    ret += base64_chars[char_array_4[i]];
+                i = 0;
+            }
+        }
+
+        if (i)
+        {
+            for (j = i; j < 3; j++)
+                char_array_3[j] = '\0';
+
+            char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
+            char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
+            char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
+            char_array_4[3] = char_array_3[2] & 0x3f;
+
+            for (j = 0; j < i + 1; j++)
+                ret += base64_chars[char_array_4[j]];
+
+            while (i++ < 3)
+                ret += '=';
+        }
+
+        return ret;
+    }
+
     /// @brief Converts a QDB::FieldValue variant into a nlohmann::json object.
     ///
     /// This function is the bridge between the database-layer FieldValue and the
@@ -604,48 +671,46 @@ namespace QDB
             {
                 using T = std::decay_t<decltype(value)>;
 
-                // Case 1: Vector of FieldValues (BSON array)
                 if constexpr (std::is_same_v<T, std::vector<FieldValue>>)
                 {
                     nlohmann::json arr = nlohmann::json::array();
                     for (const auto &element : value)
                     {
-                        arr.push_back(FieldValueToJson(element)); // Recursive call
+                        arr.push_back(FieldValueToJson(element));
                     }
                     return arr;
                 }
-                // Case 2: Map of FieldValues (BSON document)
                 else if constexpr (std::is_same_v<T, std::unordered_map<std::string, FieldValue>>)
                 {
                     nlohmann::json obj = nlohmann::json::object();
                     for (const auto &[key, val] : value)
                     {
-                        obj[key] = FieldValueToJson(val); // Recursive call
+                        obj[key] = FieldValueToJson(val);
                     }
                     return obj;
                 }
-                // Case 3: bsoncxx::oid
                 else if constexpr (std::is_same_v<T, bsoncxx::oid>)
                 {
                     return nlohmann::json(value.to_string());
                 }
-                // Case 4: b_date (SIMPLIFIED)
                 else if constexpr (std::is_same_v<T, bsoncxx::types::b_date>)
                 {
                     return FieldValueToJson(std::chrono::system_clock::time_point(value));
                 }
-                // Case 5: b_timestamp
                 else if constexpr (std::is_same_v<T, bsoncxx::types::b_timestamp>)
                 {
                     return nlohmann::json{{"timestamp", value.timestamp}, {"increment", value.increment}};
                 }
-                // Case 6: All other primitive types
+                else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
+                {
+                    return Base64Encode(value);
+                }
                 else
                 {
                     return nlohmann::json(value);
                 }
             },
-            field_value.value); // Visit the inner .value variant
+            field_value.value);
     }
 
 } // namespace QDB
