@@ -47,7 +47,8 @@ To use `QuickDB` in your own CMake project, add it as a submodule. Your project 
 
 1.  **Add QuickDB as a submodule to your project:**
     ```bash
-    git submodule add --recurse https://github.com/KevinMorrison-629/QuickDb external/quickdb
+    git submodule add https://github.com/KevinMorrison-629/QuickDb external/quickdb
+    git submodule update --init --recursive
     ```
 
 2.  **Update your CMakeLists.txt:**
