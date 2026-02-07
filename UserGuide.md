@@ -71,6 +71,8 @@ int main() {
 dbname        // Start with a clean slate for this example run.
         users_collection.delete_many({});
 
+        // Verify connection
+        db.ping();
         std::cout << "Successfully connected to the database.\n\n";
     }
 }
@@ -163,6 +165,29 @@ You can remove a single document with `delete_one` or multiple documents matchin
     std::cout << "Deleted " << deleted_many_count << " user(s) with age 50.\n";
 
     std::cout << "Remaining documents in collection: " << users_collection.count_documents() << "\n\n";
+
+## Index Management
+
+Indexes support the efficient execution of queries. QuickDB supports single field, compound, and text indexes.
+
+### Creating Indexes
+```cpp
+    // Create a simple index on 'name'
+    users_collection.create_index("name");
+
+    // Create a compound index on 'age' (ascending) and 'email' (descending)
+    users_collection.create_compound_index({{"age", true}, {"email", false}});
+```
+
+### Text Search
+To perform text search, you must first create a text index on the string field(s) you want to search.
+```cpp
+    // Create a text index on the 'name' field
+    users_collection.create_text_index({"name"});
+
+    // Perform a text search for "Alice"
+    auto text_results = users_collection.find_many(QDB::Query().text("Alice"));
+    std::cout << "Found " << text_results.size() << " users matching text search 'Alice'.\n";
 ```
 
 ## Advanced Features

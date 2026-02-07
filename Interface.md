@@ -44,8 +44,11 @@ The `Database` class is the main entry point. It manages the connection pool to 
     -   **Returns**: A `QDB::GridFSBucket` object.
 
 -   **`void with_transaction(std::function<void(mongocxx::client_session &session)> callback)`**
-    -   **Description**: Executes a series of operations within an atomic transaction. It automatically handles starting, committing, and aborting the transaction.
+    -   **Description**: executes a series of operations within an atomic transaction. It automatically handles starting, committing, and aborting the transaction.
     -   **Use Case**: Ensure that multiple database operations either all succeed or all fail together.
+
+-   **`void ping()`**
+    -   **Description**: Pings the database to verify the connection. Throws an exception if the connection fails.
 
 ### Thread Safety
 
@@ -85,8 +88,9 @@ Provides the interface for performing operations on a collection. `T` must be a 
 **Use Case:** After getting a `Collection` object from the `Database`, use its methods to insert, find, update, and delete documents.
 
 ### CRUD Operations
+All CRUD methods accept an optional `mongocxx::client_session` for transaction support.
 
--   ``int64_t create_one(T &doc, ...)``: Inserts a single document. Populates `doc._id`.
+-   `int64_t create_one(T &doc, std::optional<session> ...)`: Inserts a single document. Populates `doc._id`.
 -   `int64_t create_many(std::vector<T> &docs, ...)`: Inserts multiple documents. Populates `_id` for each doc.
 -   `std::optional<T> find_one(const Query &query, ...)`: Finds a single document matching the query.
 -   `std::vector<T> find_many(const Query &query, ...)`: Finds all documents matching the query.
@@ -113,6 +117,7 @@ These methods perform an operation and return the affected document in a single 
 
 -   `std::string create_index(const std::string &field, ...)`: Creates a single-field index.
 -   `std::string create_compound_index(const std::vector<std::pair<std::string, bool>> &fields)`: Creates a compound index.
+-   `std::string create_text_index(const std::vector<std::string> &fields)`: Creates a text index on the specified fields for text search.
 -   `void drop_index(const std::string &index_name)`: Drops an index by its name.
 -   `std::vector<std::string> list_indexes()`: Lists the names of all indexes on the collection.
 
@@ -133,7 +138,7 @@ A fluent interface for building query filters.
 -   **Comparison**: `eq` (==), `ne` (!=), `gt` (>), `gte` (>=), `lt` (<), `lte` (<=)
 -   **Array**: `in`, `all` (matches arrays containing all specified elements)
 -   **Element**: `exists` (checks for the presence or absence of a field)
--   **Evaluation**: `mod`, `regex`, `elemMatch` (queries for a matching element within an array)
+-   **Evaluation**: `mod`, `regex`, `elemMatch` (queries for a matching element within an array), `text` (performs a text search)
 
 ## `QDB::Update`
 
