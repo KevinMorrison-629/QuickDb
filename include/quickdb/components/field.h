@@ -1,8 +1,7 @@
 #pragma once
 
-#include <chrono> // Required for std::chrono::system_clock::time_point
+#include <chrono>
 #include <cstdint>
-#include <sstream>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -16,8 +15,6 @@
 #include <bsoncxx/json.hpp>
 #include <bsoncxx/oid.hpp>
 #include <bsoncxx/types.hpp>
-
-#include "nlohmann/json.hpp"
 
 namespace QDB
 {
@@ -51,6 +48,30 @@ namespace QDB
     // Forward declaration for self-referential variant.
     struct FieldValue;
 
+    // --- SFINAE DETECTORS ---
+    // These helpers detect if a type has to_fields() or from_fields() methods.
+    // This allows us to support nested models without needing the full definition of QDB::Document here.
+
+    template <typename T, typename = void> struct has_to_fields : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct has_to_fields<T, std::void_t<decltype(std::declval<const T>().to_fields())>> : std::true_type
+    {
+    };
+
+    template <typename T, typename = void> struct has_from_fields : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct has_from_fields<T, std::void_t<decltype(std::declval<T &>().from_fields(
+                                  std::declval<std::unordered_map<std::string, FieldValue>>()))>> : std::true_type
+    {
+    };
+    // ------------------------
+
     /// @brief Metafunction to map C++ types to FieldType enum values.
     /// @tparam T The C++ type to map.
     template <typename T, typename = void> struct type_to_fieldtype; // General template
@@ -59,6 +80,12 @@ namespace QDB
     template <typename T> struct type_to_fieldtype<T, std::enable_if_t<std::is_enum_v<T>>>
     {
         static constexpr FieldType value = FieldType::FT_INT_32;
+    };
+
+    /// @brief SFINAE specialization for objects with to_fields (Nested Models).
+    template <typename T> struct type_to_fieldtype<T, std::enable_if_t<has_to_fields<T>::value>>
+    {
+        static constexpr FieldType value = FieldType::FT_OBJECT;
     };
 
     /// @brief Specialization of type_to_fieldtype for bool.
@@ -185,6 +212,12 @@ namespace QDB
             {
                 value = static_cast<int32_t>(val);
             }
+            else if constexpr (has_to_fields<DecayedT>::value)
+            {
+                // This detects nested models (QDB::Model<T> or similar) via SFINAE
+                // and serializes them into a map for storage.
+                value = val.to_fields();
+            }
             else
             {
                 value = val;
@@ -209,7 +242,7 @@ namespace QDB
             fv_vector.reserve(vec.size());
             for (const auto &item : vec)
             {
-                if constexpr (std::is_base_of_v<Document, T>)
+                if constexpr (has_to_fields<T>::value)
                 {
                     fv_vector.emplace_back(FieldType::FT_OBJECT, item.to_fields());
                 }
@@ -230,7 +263,6 @@ namespace QDB
             {
                 return *this;
             }
-            // NEW: Handle binary vector extraction specifically
             else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
             {
                 if (type != FieldType::FT_BINARY)
@@ -258,8 +290,9 @@ namespace QDB
                 }
                 return result_vector;
             }
-            else if constexpr (std::is_base_of_v<Document, T>)
+            else if constexpr (has_from_fields<T>::value)
             {
+                // Deserialize nested object
                 if (type != FieldType::FT_OBJECT)
                     return T{};
                 const auto &map = std::get<std::unordered_map<std::string, FieldValue>>(value);
@@ -269,8 +302,6 @@ namespace QDB
             }
             else if constexpr (std::is_enum_v<T>)
             {
-                // Enums are stored as integers, so we retrieve the integer
-                // and static_cast it back to the enum type.
                 if (type != FieldType::FT_INT_32)
                     return T{};
                 try
@@ -320,20 +351,10 @@ namespace QDB
     };
 
     /// @brief Equality operator for FieldValue.
-    ///
-    /// Compares two FieldValue objects for equality. Primarily intended for simple types.
-    /// For complex types like arrays or objects, this performs a direct comparison of the variant's content,
-    /// which might not be a deep comparison depending on the underlying types' operator==.
-    /// @param lhs The left-hand side FieldValue.
-    /// @param rhs The right-hand side FieldValue.
-    /// @return True if the types are the same and the values are equal, false otherwise.
     inline bool operator==(const FieldValue &lhs, const FieldValue &rhs)
     {
         if (lhs.type != rhs.type)
             return false;
-        // Note: This relies on std::variant::operator== which performs
-        // element-wise comparison for std::vector and std::unordered_map
-        // if their contained types also support operator==.
         return lhs.value == rhs.value;
     }
 
@@ -346,8 +367,6 @@ namespace QDB
     template <typename BsonElement> static FieldValue fromBsonElement(const BsonElement &element);
 
     /// @brief Appends a FieldValue to a BSON array builder.
-    /// @param arr The BSON array builder to append to.
-    /// @param fv The FieldValue to append.
     static void AppendToArray(bsoncxx::builder::basic::array &arr, const FieldValue &fv)
     {
         using namespace bsoncxx::builder::basic;
@@ -417,9 +436,6 @@ namespace QDB
     }
 
     /// @brief Appends a key-FieldValue pair to a BSON document builder.
-    /// @param doc The BSON document builder to append to.
-    /// @param key The key for the new element.
-    /// @param fv The FieldValue to append.
     static void AppendToDocument(bsoncxx::builder::basic::document &doc, const std::string &key, const FieldValue &fv)
     {
         using namespace bsoncxx::builder::basic;
@@ -510,9 +526,6 @@ namespace QDB
     }
 
     /// @brief Converts any BSON element to a FieldValue.
-    /// @tparam BsonElement Can be bsoncxx::document::element or bsoncxx::array::element.
-    /// @param element The BSON element to convert.
-    /// @return The resulting FieldValue.
     template <typename BsonElement> static FieldValue fromBsonElement(const BsonElement &element)
     {
         FieldValue fv;
@@ -587,130 +600,6 @@ namespace QDB
             break;
         }
         return fv;
-    }
-
-    /// @brief Overload for converting a time_point directly to a JSON string.
-    ///
-    /// This function serves as a non-recursive helper. It contains the shared
-    /// formatting logic for dates and times, eliminating duplication.
-    /// @param tp The time_point to format.
-    /// @return A nlohmann::json object containing the formatted date string.
-    inline nlohmann::json FieldValueToJson(const std::chrono::system_clock::time_point &tp)
-    {
-        const auto tt = std::chrono::system_clock::to_time_t(tp);
-        std::tm tm_buf{};
-#ifdef _WIN32
-        gmtime_s(&tm_buf, &tt);
-#else
-        gmtime_r(&tt, &tm_buf);
-#endif
-        std::stringstream ss;
-        ss << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%SZ");
-        return ss.str();
-    }
-
-    inline std::string Base64Encode(const std::vector<uint8_t> &data)
-    {
-        static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                                "abcdefghijklmnopqrstuvwxyz"
-                                                "0123456789+/";
-
-        std::string ret;
-        int i = 0;
-        int j = 0;
-        unsigned char char_array_3[3];
-        unsigned char char_array_4[4];
-
-        for (uint8_t byte : data)
-        {
-            char_array_3[i++] = byte;
-            if (i == 3)
-            {
-                char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-                char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-                char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-                char_array_4[3] = char_array_3[2] & 0x3f;
-
-                for (i = 0; i < 4; i++)
-                    ret += base64_chars[char_array_4[i]];
-                i = 0;
-            }
-        }
-
-        if (i)
-        {
-            for (j = i; j < 3; j++)
-                char_array_3[j] = '\0';
-
-            char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-            char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-            char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-            char_array_4[3] = char_array_3[2] & 0x3f;
-
-            for (j = 0; j < i + 1; j++)
-                ret += base64_chars[char_array_4[j]];
-
-            while (i++ < 3)
-                ret += '=';
-        }
-
-        return ret;
-    }
-
-    /// @brief Converts a QDB::FieldValue variant into a nlohmann::json object.
-    ///
-    /// This function is the bridge between the database-layer FieldValue and the
-    /// API-layer JSON representation. It uses std::visit to handle each possible
-    /// type stored in the variant.
-    /// @param field_value The FieldValue to convert.
-    /// @return A nlohmann::json object representing the value.
-    inline nlohmann::json FieldValueToJson(const FieldValue &field_value)
-    {
-        return std::visit(
-            [](const auto &value) -> nlohmann::json
-            {
-                using T = std::decay_t<decltype(value)>;
-
-                if constexpr (std::is_same_v<T, std::vector<FieldValue>>)
-                {
-                    nlohmann::json arr = nlohmann::json::array();
-                    for (const auto &element : value)
-                    {
-                        arr.push_back(FieldValueToJson(element));
-                    }
-                    return arr;
-                }
-                else if constexpr (std::is_same_v<T, std::unordered_map<std::string, FieldValue>>)
-                {
-                    nlohmann::json obj = nlohmann::json::object();
-                    for (const auto &[key, val] : value)
-                    {
-                        obj[key] = FieldValueToJson(val);
-                    }
-                    return obj;
-                }
-                else if constexpr (std::is_same_v<T, bsoncxx::oid>)
-                {
-                    return nlohmann::json(value.to_string());
-                }
-                else if constexpr (std::is_same_v<T, bsoncxx::types::b_date>)
-                {
-                    return FieldValueToJson(std::chrono::system_clock::time_point(value));
-                }
-                else if constexpr (std::is_same_v<T, bsoncxx::types::b_timestamp>)
-                {
-                    return nlohmann::json{{"timestamp", value.timestamp}, {"increment", value.increment}};
-                }
-                else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
-                {
-                    return Base64Encode(value);
-                }
-                else
-                {
-                    return nlohmann::json(value);
-                }
-            },
-            field_value.value);
     }
 
 } // namespace QDB

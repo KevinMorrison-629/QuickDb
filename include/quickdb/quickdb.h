@@ -3,6 +3,7 @@
 #include "quickdb/components/collection.h" // Note: May need forward declarations to avoid circular includes
 #include "quickdb/components/exception.h"
 #include "quickdb/components/gridfs.h"
+#include "quickdb/components/reflection.h"
 
 #include <cstdint>
 #include <memory>

@@ -2,7 +2,6 @@
     "name": "quickdb",
     "version-string": "0.0.1",
     "dependencies": [
-        "mongo-cxx-driver",
-        "nlohmann-json"
+        "mongo-cxx-driver"
     ]
 }

@@ -2,6 +2,7 @@
 
 #include "quickdb/components/field.h"
 
+#include <bsoncxx/json.hpp>
 #include <bsoncxx/oid.hpp>
 #include <iomanip>
 #include <iostream>
@@ -36,40 +37,34 @@ namespace QDB
         /// @return The bsoncxx::oid object for this document.
         bsoncxx::oid get_id() const { return _id; }
 
-        /**
-         * @brief A generic to_json function for any class that inherits from QDB::Document.
-         *
-         * This allows for automatic JSON serialization of any of your data models
-         * by simply reusing the existing `to_fields` method.
-         */
-
-        /// @brief A generic to_json function for any class that inherits from QDB::Document.
+        /// @brief Serializes the document to a JSON string using bsoncxx built-ins.
         ///
-        /// This allows for automatic JSON serialization of any field types
-        /// @return JSON object representing the document data
-        nlohmann::json to_json() const
+        /// This eliminates the need for an external JSON dependency (like nlohmann).
+        /// If you need a JSON object, parse this string with your preferred library.
+        /// @return JSON string representing the document data.
+        std::string to_json() const
         {
-            nlohmann::json j = nlohmann::json::object();
-            // The _id is stored separately in the base class, so we add it first.
-            j["_id"] = get_id_str();
+            bsoncxx::builder::basic::document builder;
 
-            // Get all other fields from the document's existing to_fields method.
+            // Add _id first
+            builder.append(bsoncxx::builder::basic::kvp("_id", get_id()));
+
+            // Add all other fields
             auto fields = to_fields();
             for (const auto &pair : fields)
             {
-                // Use our new helper from field.h to convert each FieldValue to a json value.
-                j[pair.first] = QDB::FieldValueToJson(pair.second);
+                // Reuse the helper logic from field.h
+                QDB::AppendToDocument(builder, pair.first, pair.second);
             }
 
-            return j;
+            // Use the driver's native to_json functionality
+            return bsoncxx::to_json(builder.view());
         };
 
-        // The Collection<T> class will be a friend to access the protected _id member.
         template <typename T> friend class Collection;
 
     protected:
         friend class Collection<Document>;
-
         template <typename T> friend class Collection;
 
         /// @brief The document's unique identifier, managed by the library.
@@ -77,11 +72,6 @@ namespace QDB
     };
 
     /// @brief Helper to safely get a field and deserialize it into an output variable.
-    /// @tparam T The desired C++ type for the output.
-    /// @param fields The map of fields from the database.
-    /// @param key The name of the field to extract.
-    /// @param out_val The variable to populate with the field's value.
-    /// @return true if field exists in map, else false
     template <typename T>
     bool get_field(const std::unordered_map<std::string, FieldValue> &fields, const std::string &key, T &out_val)
     {
@@ -99,9 +89,6 @@ namespace QDB
     void print_field_value(const FieldValue &fv, int indent_level);
 
     /// @brief Prints a key-value pair with proper indentation.
-    /// @param key The key to print.
-    /// @param fv The FieldValue to print.
-    /// @param indent_level The current level of indentation.
     inline void print_kv_pair(const std::string &key, const FieldValue &fv, int indent_level)
     {
         std::cout << std::string(indent_level * 2, ' ') << std::left << std::setw(20) << ("\"" + key + "\":");
@@ -110,8 +97,6 @@ namespace QDB
     }
 
     /// @brief Recursively prints the content of a FieldValue.
-    /// @param fv The FieldValue to print.
-    /// @param indent_level The current indentation level for nested structures.
     inline void print_field_value(const FieldValue &fv, int indent_level)
     {
         switch (fv.type)
@@ -168,8 +153,6 @@ namespace QDB
     }
 
     /// @brief A generic template function to print any QDB::Document subclass.
-    /// @tparam T A type that inherits from QDB::Document.
-    /// @param doc The document object to print.
     template <typename T> void print_document(const T &doc)
     {
         static_assert(std::is_base_of_v<Document, T>, "T must be a subclass of QDB::Document");

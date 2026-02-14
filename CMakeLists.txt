@@ -20,7 +20,6 @@ endif()
 # --- Find Dependencies ---
 find_package(bsoncxx CONFIG REQUIRED)
 find_package(mongocxx CONFIG REQUIRED)
-find_package(nlohmann_json CONFIG REQUIRED)
 
 # --- Define the Library Target ---
 set(LIB_NAME "quickdb")
@@ -46,7 +45,6 @@ target_include_directories(${LIB_NAME} PUBLIC
 target_link_libraries(${LIB_NAME} PUBLIC
     $<IF:$<TARGET_EXISTS:mongo::bsoncxx_static>,mongo::bsoncxx_static,mongo::bsoncxx_shared>
     $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>
-    nlohmann_json::nlohmann_json
 )
 
 # --- Add the subdirectory for the test executable ---
