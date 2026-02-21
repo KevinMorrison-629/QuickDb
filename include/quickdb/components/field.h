@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <map>
+#include <utility>
 
 // Include MongoDB C++ driver headers for BSON building.
 #include <bsoncxx/builder/basic/array.hpp>
@@ -153,6 +155,16 @@ namespace QDB
     {
         static constexpr FieldType value = FieldType::FT_OBJECT;
     };
+    /// @brief Specialization of type_to_fieldtype for std::map<std::string, T>.
+    template <typename T> struct type_to_fieldtype<std::map<std::string, T>>
+    {
+        static constexpr FieldType value = FieldType::FT_OBJECT;
+    };
+    /// @brief Specialization of type_to_fieldtype for std::pair<T1, T2>.
+    template <typename T1, typename T2> struct type_to_fieldtype<std::pair<T1, T2>>
+    {
+        static constexpr FieldType value = FieldType::FT_ARRAY;
+    };
     template <> struct type_to_fieldtype<std::vector<uint8_t>>
     {
         static constexpr FieldType value = FieldType::FT_BINARY;
@@ -182,6 +194,22 @@ namespace QDB
     };
     /// @brief Specialization of is_std_vector for std::vector.
     template <typename T, typename A> struct is_std_vector<std::vector<T, A>> : std::true_type
+    {
+    };
+
+    /// @brief Type trait to check if a type is a std::map.
+    template <typename> struct is_std_map : std::false_type
+    {
+    };
+    template <typename K, typename V, typename C, typename A> struct is_std_map<std::map<K, V, C, A>> : std::true_type
+    {
+    };
+
+    /// @brief Type trait to check if a type is a std::pair.
+    template <typename> struct is_std_pair : std::false_type
+    {
+    };
+    template <typename T1, typename T2> struct is_std_pair<std::pair<T1, T2>> : std::true_type
     {
     };
 
@@ -254,6 +282,32 @@ namespace QDB
             value = fv_vector;
         }
 
+        template <typename T> FieldValue(const std::map<std::string, T> &map_in) : type(FieldType::FT_OBJECT)
+        {
+            std::unordered_map<std::string, FieldValue> fv_map;
+            for (const auto &[key, item] : map_in)
+            {
+                if constexpr (has_to_fields<T>::value)
+                {
+                    fv_map.emplace(key, FieldValue(FieldType::FT_OBJECT, item.to_fields()));
+                }
+                else
+                {
+                    fv_map.emplace(key, FieldValue(item));
+                }
+            }
+            value = fv_map;
+        }
+
+        template <typename T1, typename T2> FieldValue(const std::pair<T1, T2> &pair_in) : type(FieldType::FT_ARRAY)
+        {
+            std::vector<FieldValue> fv_vector;
+            fv_vector.reserve(2);
+            fv_vector.push_back(FieldValue(pair_in.first));
+            fv_vector.push_back(FieldValue(pair_in.second));
+            value = fv_vector;
+        }
+
         /// @brief Template method to get the value as a specific type T.
         /// @tparam T The desired type.
         /// @return The value cast to type T. Returns a default-constructed T on failure.
@@ -289,6 +343,31 @@ namespace QDB
                     result_vector.push_back(fv_item.as<U>());
                 }
                 return result_vector;
+            }
+            else if constexpr (is_std_map<T>::value)
+            {
+                using V = typename T::mapped_type;
+                if (type != FieldType::FT_OBJECT)
+                    return T{};
+                const auto &fv_map = std::get<std::unordered_map<std::string, FieldValue>>(value);
+                T result_map;
+                for (const auto &[k, v] : fv_map)
+                {
+                    result_map[k] = v.as<V>();
+                }
+                return result_map;
+            }
+            else if constexpr (is_std_pair<T>::value)
+            {
+                using T1 = typename T::first_type;
+                using T2 = typename T::second_type;
+                if (type != FieldType::FT_ARRAY)
+                    return T{};
+                const auto &fv_vector = std::get<std::vector<FieldValue>>(value);
+                T result_pair;
+                if (fv_vector.size() >= 1) result_pair.first = fv_vector[0].as<T1>();
+                if (fv_vector.size() >= 2) result_pair.second = fv_vector[1].as<T2>();
+                return result_pair;
             }
             else if constexpr (has_from_fields<T>::value)
             {
