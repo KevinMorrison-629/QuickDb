@@ -177,6 +177,22 @@ namespace QDB
             return *this;
         }
 
+        /// @brief Adds a "not in" ($nin) condition.
+        /// @tparam T The type of the values in the vector.
+        /// @param field The document field.
+        /// @param values A vector of values to exclude.
+        /// @return A reference to the current Query object for chaining.
+        template <typename T> Query &nin(const std::string &field, const std::vector<T> &values)
+        {
+            std::vector<FieldValue> fv_vector;
+            for (const auto &val : values)
+            {
+                fv_vector.emplace_back(val);
+            }
+            add_operator_condition(field, "$nin", FieldValue(fv_vector));
+            return *this;
+        }
+
         /// @brief Adds an "all" ($all) condition to match arrays containing all specified elements.
         /// @tparam T The type of the values in the vector.
         /// @param field The array field.
