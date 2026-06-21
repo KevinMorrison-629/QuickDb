@@ -13,6 +13,7 @@
 // This avoids re-declaration errors and keeps this header file lightweight.
 #include <mongocxx/instance-fwd.hpp>
 #include <mongocxx/pool-fwd.hpp>
+#include <mongocxx/client_session.hpp>
 
 namespace QDB
 {
@@ -56,6 +57,12 @@ namespace QDB
             auto client_entry = std::make_unique<mongocxx::pool::entry>(m_pool->acquire());
             auto collection_handle = (*(*client_entry))[db_name][collection_name];
             return Collection<T>(std::move(client_entry), collection_handle);
+        }
+
+        template <typename T> Collection<T> get_collection(mongocxx::client_session &session, const std::string &db_name, const std::string &collection_name)
+        {
+            auto collection_handle = session.client()[db_name][collection_name];
+            return Collection<T>(nullptr, collection_handle);
         }
 
         /// @brief Executes a series of operations within a transaction.
